@@ -721,7 +721,7 @@ file_handle_type open_file_helper(const String &path, const access_mode mode) {
                          FILE_SHARE_READ | FILE_SHARE_WRITE,
                          0,
                          OPEN_EXISTING,
-                         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,  // Optimize for sequential access
+                         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, // Optimize for sequential access
                          0);
 }
 
@@ -833,7 +833,7 @@ inline mmap_context memory_map(const file_handle_type file_handle,
     char *mapping_start = static_cast<char *>(::mmap(0, // Don't give hint as to where to map.
                                                      length_to_map,
                                                      mode == access_mode::read ? PROT_READ : PROT_WRITE,
-                                                     MAP_SHARED | MAP_POPULATE,  // Prefault pages for sequential access
+                                                     MAP_SHARED | MAP_POPULATE, // Prefault pages for sequential access
                                                      file_handle,
                                                      aligned_offset));
     if (mapping_start == MAP_FAILED) {

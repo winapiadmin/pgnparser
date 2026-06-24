@@ -1,9 +1,9 @@
 #pragma once
 
+#include "mio.hpp"
+#include <cassert>
 #include <cstring>
 #include <string_view>
-#include <cassert>
-#include "mio.hpp"
 namespace pgn {
 
 class PGNVisitor {
@@ -14,7 +14,7 @@ class PGNVisitor {
     virtual void onTag(std::string_view key, std::string_view value) {}
     virtual void onMove(std::string_view san) {}
     virtual void onComment(std::string_view text) {}
-    virtual void onVariationStart() {/*track variations*/}
+    virtual void onVariationStart() { /*track variations*/ }
     virtual void onVariationEnd() {}
     virtual void onGameEnd(std::string_view result) = 0;
     virtual void onNAG(int nag) {}
@@ -50,9 +50,7 @@ class PGNInput {
         return cur_ == end_ ? '\0' : *cur_++;
     }
 
-    void skip(size_t n = 1) {
-        cur_ += (n < remaining() ? n : remaining());
-    }
+    void skip(size_t n = 1) { cur_ += (n < remaining() ? n : remaining()); }
 
     void consume(size_t n) { skip(n); }
 
@@ -63,8 +61,10 @@ class PGNInput {
     void skipWhitespace() {
         while (cur_ != end_) {
             unsigned char c = static_cast<unsigned char>(*cur_);
-            if (c > 0x20) break;
-            if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+            if (c > 0x20)
+                break;
+            if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+                break;
             ++cur_;
         }
     }
@@ -90,13 +90,19 @@ class PGNParser {
     explicit PGNParser(PGNVisitor &visitor);
 
     void parse(PGNInput &input);
-    void parse(std::string_view data) { PGNInput in(data); parse(in); }
+    void parse(std::string_view data) {
+        PGNInput in(data);
+        parse(in);
+    }
     /**
      * Parses all games in the input. Not thread-safe.
      * @param input PGN input to parse.
      */
     void parseAll(PGNInput &input);
-    void parseAll(std::string_view data) { PGNInput in(data); parseAll(in); }
+    void parseAll(std::string_view data) {
+        PGNInput in(data);
+        parseAll(in);
+    }
 
   private:
     std::string tagValue_;

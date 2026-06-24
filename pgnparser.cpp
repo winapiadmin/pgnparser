@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cstring>
 
-
 namespace pgn {
 static inline int ctz(uint64_t x) {
 #if defined(_MSC_VER)
@@ -72,11 +71,14 @@ void PGNParser::parseTagSection() {
         while (true) {
             while (p < end) {
                 unsigned char c = static_cast<unsigned char>(*p);
-                if (c > 0x20) break;
-                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+                if (c > 0x20)
+                    break;
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+                    break;
                 ++p;
             }
-            if (p >= end || *p != '[') break;
+            if (p >= end || *p != '[')
+                break;
             ++p; // skip '['
             const void *q = std::memchr(p, ']', static_cast<size_t>(end - p));
             if (q) {
@@ -141,7 +143,8 @@ void PGNParser::parseTag() {
 
     while (p < end) {
         unsigned char c = static_cast<unsigned char>(*p);
-        if (c <= 0x20 || c == ']') break;
+        if (c <= 0x20 || c == ']')
+            break;
         ++p;
     }
 
@@ -154,8 +157,10 @@ void PGNParser::parseTag() {
 
     if (p >= end || *p != '"') {
         const char *q = p;
-        while (q < end && *q != ']') ++q;
-        if (q < end) ++q;
+        while (q < end && *q != ']')
+            ++q;
+        if (q < end)
+            ++q;
         input_->consume(static_cast<size_t>(q - p));
         return;
     }
@@ -225,8 +230,10 @@ static inline const char *skipWhitespace(const char *p, const char *end) noexcep
     while (p < end) {
         unsigned char c = static_cast<unsigned char>(*p);
         // Fast check: all 4 whitespace chars are <= ' ' (0x20)
-        if (c > 0x20) break;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+        if (c > 0x20)
+            break;
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+            break;
         ++p;
     }
     return p;
@@ -417,9 +424,10 @@ void PGNParser::skipMovetext() {
                 break;
             ++p;
         }
-        if (p >= end) break;
+        if (p >= end)
+            break;
 
-found:
+    found:
         char c = *p++;
 
         if (c == '{') {
@@ -436,15 +444,21 @@ found:
                 p += 4;
             }
             // does the above loop but slower, for the last few bytes
-            while (p < end && *p != '}') ++p;
-            if (p < end) ++p;
+            while (p < end && *p != '}')
+                ++p;
+            if (p < end)
+                ++p;
         } else if (c == ';') {
-            while (p < end && *p != '\n') ++p;
-            if (p < end) ++p;
+            while (p < end && *p != '\n')
+                ++p;
+            if (p < end)
+                ++p;
         } else if (c == '\n') {
-            if (p < end && *p == '\r') ++p;
+            if (p < end && *p == '\r')
+                ++p;
             const char *s = p;
-            while (s < end && (*s == ' ' || *s == '\t')) ++s;
+            while (s < end && (*s == ' ' || *s == '\t'))
+                ++s;
             if (s < end && (*s == '\n' || *s == '[')) {
                 input_->consume(static_cast<size_t>(p - base));
                 return;
@@ -461,9 +475,11 @@ void PGNParser::parseComment() {
     const char *start = input_->data();
     const char *end = start + input_->remaining();
     const char *q = start;
-    while (q < end && *q != '}') ++q;
+    while (q < end && *q != '}')
+        ++q;
     input_->consume(static_cast<size_t>(q - start));
-    if (!input_->eof() && input_->peek() == '}') input_->read();
+    if (!input_->eof() && input_->peek() == '}')
+        input_->read();
 
     std::string_view sv(start, static_cast<size_t>(q - start));
     size_t left = 0;
@@ -471,15 +487,19 @@ void PGNParser::parseComment() {
 
     while (left < right) {
         unsigned char c = static_cast<unsigned char>(sv[left]);
-        if (c > 0x20) break;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+        if (c > 0x20)
+            break;
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+            break;
         ++left;
     }
 
     while (right > left) {
         unsigned char c = static_cast<unsigned char>(sv[right - 1]);
-        if (c > 0x20) break;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+        if (c > 0x20)
+            break;
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+            break;
         --right;
     }
 
@@ -491,10 +511,13 @@ void PGNParser::parseLineComment() {
     const char *start = input_->data();
     const char *end = start + input_->remaining();
     const char *q = start;
-    while (q < end && *q != '\n') ++q;
+    while (q < end && *q != '\n')
+        ++q;
     input_->consume(static_cast<size_t>(q - start));
-    if (!input_->eof() && input_->peek() == '\n') input_->read();
-    if (!input_->eof() && input_->peek() == '\r') input_->read();
+    if (!input_->eof() && input_->peek() == '\n')
+        input_->read();
+    if (!input_->eof() && input_->peek() == '\r')
+        input_->read();
 
     std::string_view sv(start, static_cast<size_t>(q - start));
     size_t left = 0;
@@ -502,15 +525,19 @@ void PGNParser::parseLineComment() {
 
     while (left < right) {
         unsigned char c = static_cast<unsigned char>(sv[left]);
-        if (c > 0x20) break;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+        if (c > 0x20)
+            break;
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+            break;
         ++left;
     }
 
     while (right > left) {
         unsigned char c = static_cast<unsigned char>(sv[right - 1]);
-        if (c > 0x20) break;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+        if (c > 0x20)
+            break;
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+            break;
         --right;
     }
 
@@ -539,10 +566,14 @@ std::string_view PGNParser::readMove() {
     while (p < end && static_cast<size_t>(p - start) < MAX_MOVE_LENGTH) {
         unsigned char c = static_cast<unsigned char>(*p);
         // Fast ASCII range check for move characters (a-z, A-Z, 0-9, '-', '+', '#', '=')
-        if (c > 0x7A) break;
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') break;
-        if (c == '{' || c == '}' || c == '(' || c == ')' || c == ';') break;
-        if (c == '$' || c == '!' || c == '?') break;
+        if (c > 0x7A)
+            break;
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+            break;
+        if (c == '{' || c == '}' || c == '(' || c == ')' || c == ';')
+            break;
+        if (c == '$' || c == '!' || c == '?')
+            break;
         ++p;
     }
 
@@ -558,7 +589,8 @@ int PGNParser::readNumber() {
 
     while (p < end) {
         unsigned d = static_cast<unsigned>(*p) - '0';
-        if (d > 9) break;
+        if (d > 9)
+            break;
         num = num * 10 + static_cast<int>(d);
         ++p;
     }
