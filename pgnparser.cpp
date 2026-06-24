@@ -127,9 +127,25 @@ void PGNParser::parseTagSection() {
             if (p >= end || *p != '[')
                 break;
             ++p; // skip '['
-            const void *q = std::memchr(p, ']', static_cast<size_t>(end - p));
-            if (q) {
-                p = static_cast<const char *>(q) + 1;
+            bool inString = false;
+            bool escaped = false;
+            while (p < end) {
+                char ch = *p++;
+                if (escaped) {
+                    escaped = false;
+                    continue;
+                }
+                if (inString && ch == '\\') {
+                    escaped = true;
+                    continue;
+                }
+                if (ch == '"') {
+                    inString = !inString;
+                    continue;
+                }
+                if (!inString && ch == ']')
+                    break;
+            }
             } else {
                 p = end;
                 break;

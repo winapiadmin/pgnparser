@@ -960,10 +960,17 @@ void basic_mmap<AccessMode, ByteT>::map(const String &path,
     }
 
     map(handle, offset, length, error);
-    // This MUST be after the call to map, as that sets this to true.
-    if (!error) {
-        is_handle_internal_ = true;
+    if (error) {
+`#ifdef` _WIN32
+        ::CloseHandle(handle);
+`#else`
+        ::close(handle);
+`#endif`
+        return;
     }
+
+    // This MUST be after the call to map, as that sets this to true.
+    is_handle_internal_ = true;
 }
 
 template <access_mode AccessMode, typename ByteT>
