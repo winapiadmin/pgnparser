@@ -115,10 +115,6 @@ void PGNBuilder::onMove(std::string_view san) {
             tail_ = game_.root.get();
         }
     } else {
-        if (branchStack_.empty()) {
-            std::cerr << "Error: Variation stack is empty in onMove." << std::endl;
-            return;
-        }
         auto &branch = branchStack_.back();
         if (branch.varTail) {
             branch.varTail->next = std::move(node);
