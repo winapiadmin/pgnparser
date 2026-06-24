@@ -44,8 +44,7 @@ static std::string print_game(const pgn::Game& game) {
     else { std::cout << "  PASS: " #a " == " #b << std::endl; } \
 } while(0)
 
-#define TEST_CASE(name) std::cout << "\n--- " name " ---" << std::endl; int failures_##__LINE__ = 0
-#define FAIL(failures) do { failures += failures_##__LINE__; } while(0)
+#define TEST_CASE(name) std::cout << "\n--- " name " ---" << std::endl
 
 // -------------------------------------------------------------------
 // Helpers
@@ -78,7 +77,6 @@ int main() {
         TEST_CASE("STR tags are emitted in standard order");
 
         pgn::Game game;
-        pgn::PGNPrinter printer(std::cout);
         std::ostringstream oss;
         pgn::PGNPrinter p(oss);
         p.print(game);
@@ -110,7 +108,7 @@ int main() {
         CHECK(posBlack > posWhite);
         CHECK(posResult > posBlack);
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -144,7 +142,7 @@ int main() {
         }
         CHECK_EQ(dots, 41);
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -161,7 +159,7 @@ int main() {
         std::string o = print_game(g);
         CHECK(o.find("1. e4 e5 2. Nf3 Nc6 *") != std::string::npos);
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -176,7 +174,7 @@ int main() {
         std::string out = print_game(game);
         CHECK(contains_line(out, "1. Nc3 {???} Nc6 *"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -192,7 +190,7 @@ int main() {
         // SetUp tag should follow STR tags
         CHECK(contains_line(out, "[SetUp \"1\"]"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -204,7 +202,7 @@ int main() {
         CHECK(contains_line(out, "{-0.65/10 0.325s, n=179998}"));
         CHECK(contains_line(out, "{+0.61/8 0.323s, n=207718}"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -223,7 +221,7 @@ int main() {
         std::string out = print_game(game);
         CHECK(contains_line(out, "1. e4 e5 2. Nf3 Nc6"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -240,7 +238,7 @@ int main() {
         CHECK(contains_line(out, "[FEN \"r1bqkb1r/pppppppp/2n5/4P3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 3\"]"));
         CHECK(contains_line(out, "3. d4 e6"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -255,7 +253,7 @@ int main() {
         CHECK(posGameId != std::string::npos);
         CHECK(posGameId > posResult); // GameId comes after Result
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -268,7 +266,7 @@ int main() {
         // Result tag should be "0-1" and the termination marker should match
         CHECK(contains_line(out, "[Result \"0-1\"]"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -285,7 +283,7 @@ int main() {
         CHECK(contains_line(out, "[Result \"1-0\"]"));
         CHECK(contains_line(out, "1-0"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -317,7 +315,7 @@ int main() {
         CHECK(pos.is_checkmate());
         CHECK(pos.side_to_move() == WHITE);
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -331,7 +329,7 @@ int main() {
         std::string out = print_game(game);
         CHECK(contains_line(out, "1. e4 {....} e5 *"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -342,7 +340,7 @@ int main() {
         std::string out = print_game(game);
         CHECK(contains_line(out, "1. bxa3 e5 *"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -353,7 +351,7 @@ int main() {
         std::string out = print_game(game);
         CHECK(contains_line(out, "4. bxc3 dxc3 *"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -367,7 +365,7 @@ int main() {
         CHECK(out.find('$') == std::string::npos);
         CHECK(contains_line(out, "1-0"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -379,7 +377,7 @@ int main() {
         // Variation should show 1. d4 (white move) not 1... d4 (black move)
         CHECK(contains_line(out, "1. e4 (1. d4 d5) e5 *"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -390,7 +388,7 @@ int main() {
         std::string out = print_game(game);
         CHECK(contains_line(out, "1. e4 e5 (1... d5 2. exd5) 2. Nf3 *"));
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------
@@ -410,7 +408,7 @@ int main() {
         CHECK(hasFen);
         CHECK_EQ(g2.startPos.fen(), "4k3/8/8/8/8/8/8/4K3 w - - 0 1");
 
-        FAIL(failures);
+
     }
 
     // ---------------------------------------------------------------

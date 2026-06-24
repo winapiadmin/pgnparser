@@ -961,9 +961,12 @@ void basic_mmap<AccessMode, ByteT>::map(const String &path,
 
     map(handle, offset, length, error);
     if (error) {
-        `#ifdef ` _WIN32 ::CloseHandle(handle);
-        `#else ` ::close(handle);
-        `#endif ` return;
+#ifdef _WIN32
+        ::CloseHandle(handle);
+#else
+        ::close(handle);
+#endif
+        return;
     }
 
     // This MUST be after the call to map, as that sets this to true.

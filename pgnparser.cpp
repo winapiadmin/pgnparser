@@ -147,20 +147,16 @@ void PGNParser::parseTagSection() {
                     break;
             }
         }
-        else {
-            p = end;
-            break;
-        }
+        input_->consume(static_cast<size_t>(p - input_->data()));
+        return;
     }
-    input_->consume(static_cast<size_t>(p - input_->data()));
-    return;
-}
-while (true) {
-    skipWhitespace();
-    if (input_->eof() || input_->peek() != '[')
-        break;
-    parseTag();
-}
+
+    while (true) {
+        skipWhitespace();
+        if (input_->eof() || input_->peek() != '[')
+            break;
+        parseTag();
+    }
 }
 
 /// Parse a NAG (Numerical Annotation Glyph) — either as `$nnn` or
