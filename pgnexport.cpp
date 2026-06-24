@@ -35,6 +35,9 @@ Game::Game(const chess::Position &pos) : startPos(pos) {
     }
 }
 
+/// Set a tag pair, updating both the ordered `tags` vector and the
+/// `tagMap` hash table.  If the key already exists its value is replaced
+/// in place; otherwise a new entry is appended.
 void Game::setTag(std::string_view k, std::string_view v) {
     std::string keyStr(k);
     tagMap[keyStr] = v;
@@ -48,6 +51,11 @@ void Game::setTag(std::string_view k, std::string_view v) {
     tags.emplace_back(keyStr, v);
 }
 
+/// Reconstruct a full `Game` (including all moves) from a chess::Position
+/// by unwinding its history stack with undoMove<true>.
+///
+/// The moves are replayed forwards after unwinding so the returned
+/// Position matches the original.
 Game Game::fromPosition(chess::Position &pos) {
     std::vector<chess::Move> moves;
 
@@ -81,6 +89,8 @@ Game Game::fromPosition(chess::Position &pos) {
 
 Game PGNBuilder::release() { return std::move(game_); }
 
+/// Stores the tag in the game and, for "FEN" tags, initialises the
+/// starting position.
 void PGNBuilder::onTag(std::string_view k, std::string_view v) {
     game_.setTag(k, v);
     if (k == "FEN") {
@@ -88,6 +98,9 @@ void PGNBuilder::onTag(std::string_view k, std::string_view v) {
     }
 }
 
+/// Append a move to the current line.  If inside a variation
+/// (branchStack_ non-empty), the move is added to the current variation
+/// branch rather than the main line.
 void PGNBuilder::onMove(std::string_view san) {
     auto node = std::make_unique<MoveNode>();
     node->raw = std::string(san);
@@ -120,14 +133,17 @@ void PGNBuilder::onMove(std::string_view san) {
     lastNode_ = tail_;
 }
 
+/// Attach a comment to the most recently parsed move node.
 void PGNBuilder::onComment(std::string_view text) {
     if (lastNode_) {
         lastNode_->comment = text;
     }
 }
 
+/// Push a branch marker so subsequent moves go into a variation.
 void PGNBuilder::onVariationStart() { branchStack_.push_back({ tail_, nullptr }); }
 
+/// Pop the branch stack and restore the tail to the branch point.
 void PGNBuilder::onVariationEnd() {
     if (!branchStack_.empty()) {
         tail_ = branchStack_.back().branchPoint;
@@ -135,12 +151,19 @@ void PGNBuilder::onVariationEnd() {
     }
 }
 
+/// Store the game result string.
 void PGNBuilder::onGameEnd(std::string_view r) { game_.result = r; }
 
+/// NAGs are ignored during export (moves are re-parsed via chesslib).
 void PGNBuilder::onNAG(int) {}
 
 PGNPrinter::PGNPrinter(std::ostream &os) : os_(os) {}
 
+/// Parse a move string into a chesslib Move.
+///
+/// First attempts UCI parsing (fast path for compatible formats).
+/// On failure, strips suffix `+`/`#`, normalises `0`→`O` for castling,
+/// and disambiguates by comparing SAN against all legal moves.
 chess::Move PGNPrinter::parseMove(chess::Position &pos, const std::string &raw) {
     if (raw.size() >= 4) {
         try {
@@ -172,6 +195,9 @@ chess::Move PGNPrinter::parseMove(chess::Position &pos, const std::string &raw) 
     return chess::Move::none();
 }
 
+/// Recursively print a move line including move numbers, comments,
+/// and variations.  Advances the Position as moves are applied so
+/// subsequent SANs are computed from the correct board state.
 void PGNPrinter::printNode(MoveNode *node, chess::Position &pos) {
     if (!node)
         return;
@@ -230,6 +256,11 @@ std::string PGNPrinter::tagValue(const Game &game, const std::string &key, const
     return fallback;
 }
 
+/// Serialise the game to PGN.  Output order:
+///   1. Seven STR tag pairs in canonical order (with "Result" from game.result).
+///   2. Remaining tags (non-STR) in insertion order.
+///   3. Movetext with move numbers, comments, and variations.
+///   4. Game result string.
 void PGNPrinter::print(const Game &game) {
     // always emit the seven STR tags in standard order
     for (const char *key : STR_ORDER) {

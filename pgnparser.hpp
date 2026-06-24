@@ -24,58 +24,90 @@
 #include <string_view>
 namespace pgn {
 
+/// Callback interface for PGN parsing events.
+///
+/// Override the virtual methods to receive parsed PGN data.  The callbacks
+/// are invoked in document order during `PGNParser::parseAll()`.
 class PGNVisitor {
   public:
     virtual ~PGNVisitor() = default;
 
+    /// Override and return false to skip tag parsing entirely (count-only mode).
+    /// When false, `onTag()` is never called and tag sections are batch-skipped.
     virtual bool wantsTags() const { return true; }
+    /// Called for each tag pair, e.g. onTag("Event", "World Championship").
     virtual void onTag(std::string_view key, std::string_view value) {}
+    /// Called for each SAN move string, e.g. onMove("e4").
     virtual void onMove(std::string_view san) {}
+    /// Called for brace and semicolon comments (leading/trailing whitespace trimmed).
     virtual void onComment(std::string_view text) {}
-    virtual void onVariationStart() { /*track variations*/ }
+    /// Called when a variation (parenthesised line) begins.
+    virtual void onVariationStart() {}
+    /// Called when the current variation ends.
     virtual void onVariationEnd() {}
+    /// Called at game end with the result string ("1-0", "1/2-1/2", "*", …)
     virtual void onGameEnd(std::string_view result) = 0;
+    /// Called for NAG (Numerical Annotation Glyph) values.
     virtual void onNAG(int nag) {}
+    /// Called before each game starts.  Return false to skip parsing its
+    /// movetext (tag section is still parsed when wantsTags() is true).
     virtual bool onGameStart() { return true; }
 };
 
+/// @return true when `c` is an ASCII digit ('0'–'9').
 constexpr bool isDigit(char c) noexcept { return c >= '0' && c <= '9'; }
 
+/// @return true when `c` is a PGN whitespace character (space, tab, newline, CR).
 constexpr bool isWhitespace(char c) noexcept { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
+/// Memory-mapped or buffer-backed input stream for PGN data.
+///
+/// Construct with a `std::string_view` for in-memory data or with a filename
+/// to mmap a file.  Provides forward-only cursor access (read / consume) with
+/// no allocation in the hot path.
 class PGNInput {
   public:
+    /// Construct from an in-memory buffer (no copy, no mmap).
     explicit PGNInput(std::string_view data) : begin_(data.data()), cur_(data.data()), end_(data.data() + data.size()) {}
 
     PGNInput(const PGNInput &) = default;
     PGNInput &operator=(const PGNInput &) = default;
+
+    /// Memory-map the given file and position the cursor at the beginning.
     template <typename StringT> explicit PGNInput(StringT filename) {
         std::error_code ec;
         mmap_ = mio::make_mmap_source(filename, ec);
         if (ec)
             throw std::runtime_error(ec.message());
-
         begin_ = mmap_.data();
         cur_ = begin_;
         end_ = begin_ + mmap_.size();
     }
+
+    /// Return the current byte without advancing, or '\0' at EOF.
     char peek() const { return cur_ == end_ ? '\0' : *cur_; }
 
+    /// @return true when the cursor is at the end of input.
     bool eof() const { return cur_ == end_; }
 
+    /// Read and advance by one byte.  Returns '\0' at EOF.
     char read() {
         assert(cur_ <= end_ && "Invalid cursor position");
         return cur_ == end_ ? '\0' : *cur_++;
     }
 
+    /// Advance the cursor by `n` bytes (clamped to remaining input).
     void skip(size_t n = 1) { cur_ += (n < remaining() ? n : remaining()); }
 
+    /// Alias for skip().
     void consume(size_t n) { skip(n); }
 
+    /// @return true when the remaining input begins with the given text.
     bool startsWith(std::string_view text) const {
         return remaining() >= text.size() && std::memcmp(cur_, text.data(), text.size()) == 0;
     }
 
+    /// Skip ASCII whitespace bytes (space, tab, \\n, \\r) at the cursor.
     void skipWhitespace() {
         while (cur_ != end_) {
             unsigned char c = static_cast<unsigned char>(*cur_);
@@ -87,12 +119,16 @@ class PGNInput {
         }
     }
 
+    /// @return pointer to the current cursor position into the underlying buffer.
     const char *data() const { return cur_; }
 
+    /// @return number of bytes remaining from cursor to end.
     size_t remaining() const { return static_cast<size_t>(end_ - cur_); }
 
+    /// @return absolute byte offset of the cursor from the start of input.
     size_t offset() const { return static_cast<size_t>(cur_ - begin_); }
 
+    /// @return a view of the remaining input from cursor to end.
     std::string_view remainingView() const { return std::string_view(cur_, remaining()); }
 
   private:
@@ -103,19 +139,24 @@ class PGNInput {
     const char *end_;
 };
 
+/// Zero-allocation PGN parser that drives a `PGNVisitor`.
+///
+/// Parsing is done via `parse()` (single game) or `parseAll()` (all games
+/// in the input).  The visitor receives callbacks in document order.
 class PGNParser {
   public:
     explicit PGNParser(PGNVisitor &visitor);
 
+    /// Parse a single game (tag section + movetext).  Not thread-safe.
     void parse(PGNInput &input);
     void parse(std::string_view data) {
         PGNInput in(data);
         parse(in);
     }
-    /**
-     * Parses all games in the input. Not thread-safe.
-     * @param input PGN input to parse.
-     */
+
+    /// Parse all games in the input.  Calls `onGameStart()` before each game
+    /// so the visitor can skip movetext parsing (count-only mode).
+    /// Not thread-safe.
     void parseAll(PGNInput &input);
     void parseAll(std::string_view data) {
         PGNInput in(data);
