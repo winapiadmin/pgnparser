@@ -119,7 +119,7 @@ std::string nag_symbol(int nag) {
 
 int main(int argc, char **argv) {
     if (argc == 1) {
-        std::cerr << argv[0] << " dumps the PGN file as JSON (see testgen.py for python-chess example)\n";
+        std::cerr << argv[0] << " dumps the first game in the PGN file as JSON (see testgen.py for python-chess example)\n";
         std::cerr << argv[0] << " <pgn file>";
         return 1;
     }

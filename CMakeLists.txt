@@ -35,15 +35,15 @@ if (PGNPARSER_BUILD_EXPORT)
     target_include_directories(pgnexport PUBLIC ${chesslib_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 
     if (PGNPARSER_BUILD_EXAMPLES)
-        add_executable(pgnexport_example1 export_example1.cpp)
+        add_executable(pgnexport_example1 examples/export_example1.cpp)
         target_link_libraries(pgnexport_example1 PRIVATE pgnexport)
     endif()
 endif()
 
 if (PGNPARSER_BUILD_EXAMPLES)
-    add_executable(pgnparser_example1 import_example1.cpp)
+    add_executable(pgnparser_example1 examples/import_example1.cpp)
     target_link_libraries(pgnparser_example1 PRIVATE pgnparser)
-    add_executable(pgnparser_count_games import_example2.cpp)
+    add_executable(pgnparser_count_games examples/import_example2.cpp)
     target_link_libraries(pgnparser_count_games PRIVATE pgnparser)
 endif()
 

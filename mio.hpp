@@ -3,7 +3,7 @@
     large files and from existing buffer.
 
     mio.hpp special notice:
-    > Patched version of mio.hpp to define NOMINMAX for chesslib
+    > Patched version of mio.hpp
 
     Copyright (C) 2026  winapiadmin
 
@@ -117,10 +117,12 @@ inline size_t make_offset_page_aligned(size_t offset) noexcept {
 
 #endif // MIO_PAGE_HEADER
 
+#include <cerrno>
 #include <cstdint>
 #include <iterator>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -190,7 +192,7 @@ template <access_mode AccessMode, typename ByteT> struct basic_mmap {
     // user provided it, but we must close it if we obtained it using the
     // provided path. For this reason, this flag is used to determine when to
     // close `file_handle_`.
-    bool is_handle_internal_;
+    bool is_handle_internal_ = false;
 
   public:
     /**
@@ -836,7 +838,7 @@ inline mmap_context memory_map(const file_handle_type file_handle,
                                                          win::int64_high(max_file_size),
                                                          win::int64_low(max_file_size),
                                                          0);
-    if (file_mapping_handle == invalid_handle) {
+    if (file_mapping_handle == nullptr) {
         error = detail::last_error();
         return {};
     }
@@ -854,8 +856,12 @@ inline mmap_context memory_map(const file_handle_type file_handle,
 #else // POSIX
     char *mapping_start = static_cast<char *>(::mmap(0, // Don't give hint as to where to map.
                                                      length_to_map,
-                                                     mode == access_mode::read ? PROT_READ : PROT_WRITE,
+                                                     mode == access_mode::read ? PROT_READ : (PROT_READ | PROT_WRITE),
+#if defined(__linux__)
                                                      MAP_SHARED | MAP_POPULATE, // Prefault pages for sequential access
+#else
+                                                     MAP_SHARED,
+#endif
                                                      file_handle,
                                                      aligned_offset));
     if (mapping_start == MAP_FAILED) {

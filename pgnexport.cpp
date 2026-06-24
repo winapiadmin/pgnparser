@@ -281,12 +281,12 @@ void PGNPrinter::print(const Game &game) {
         }
     }
 
+    os_ << std::endl;
     chess::Position pos = game.startPos;
     printNode(game.root.get(), pos);
 
-    if (!game.result.empty()) {
-        os_ << " " << game.result << std::endl;
-    }
+    std::string r = game.result.empty() ? tagValue(game, "Result", "") : game.result;
+    os_ << " " << (r.empty() ? "*" : r) << std::endl;
 }
 
 } // namespace pgn

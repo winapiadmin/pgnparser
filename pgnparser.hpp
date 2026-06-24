@@ -21,7 +21,10 @@
 #include "mio.hpp"
 #include <cassert>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 #include <string_view>
+#include <system_error>
 namespace pgn {
 
 /// Callback interface for PGN parsing events.
@@ -68,7 +71,8 @@ constexpr bool isWhitespace(char c) noexcept { return c == ' ' || c == '\t' || c
 class PGNInput {
   public:
     /// Construct from an in-memory buffer (no copy, no mmap).
-    explicit PGNInput(std::string_view data) : begin_(data.data()), cur_(data.data()), end_(data.data() + data.size()) {}
+    explicit PGNInput(std::string_view data)
+        : begin_(data.empty() ? &s_empty_ : data.data()), cur_(begin_), end_(begin_ + data.size()) {}
 
     PGNInput(const PGNInput &) = default;
     PGNInput &operator=(const PGNInput &) = default;
@@ -132,6 +136,8 @@ class PGNInput {
     std::string_view remainingView() const { return std::string_view(cur_, remaining()); }
 
   private:
+    inline static const char s_empty_ = '\0';
+
     mio::mmap_source mmap_;
 
     const char *begin_;
