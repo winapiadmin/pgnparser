@@ -1,0 +1,11 @@
+[Event "bxc3 pawn capture"]
+[Site "?"]
+[Date "2026.06.22"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+[FEN "rnbqkbnr/pp1ppppp/8/8/3pP3/2p5/PP1P1PPP/RNBQKBNR w KQkq - 0 4"]
+[SetUp "1"]
+
+1. bxc3 dxc3 *

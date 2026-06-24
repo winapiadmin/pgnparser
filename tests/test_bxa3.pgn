@@ -1,0 +1,11 @@
+[Event "bxa3 from FEN"]
+[Site "?"]
+[Date "2026.06.22"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/n7/1PPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[SetUp "1"]
+
+1. bxa3 e5 *
