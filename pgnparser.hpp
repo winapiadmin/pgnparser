@@ -49,7 +49,7 @@ class PGNVisitor {
     /// Called when the current variation ends.
     virtual void onVariationEnd() {}
     /// Called at game end with the result string ("1-0", "1/2-1/2", "*", …)
-    virtual void onGameEnd(std::string_view result) = 0;
+    virtual void onGameEnd(std::string_view result) {}
     /// Called for NAG (Numerical Annotation Glyph) values.
     virtual void onNAG(int nag) {}
     /// Called before each game starts.  Return false to skip parsing its
@@ -74,8 +74,8 @@ class PGNInput {
     explicit PGNInput(std::string_view data)
         : begin_(data.empty() ? &s_empty_ : data.data()), cur_(begin_), end_(begin_ + data.size()) {}
 
-    PGNInput(const PGNInput &) = default;
-    PGNInput &operator=(const PGNInput &) = default;
+    PGNInput(const PGNInput &) = delete;
+    PGNInput &operator=(const PGNInput &) = delete;
 
     /// Memory-map the given file and position the cursor at the beginning.
     template <typename StringT> explicit PGNInput(StringT filename) {
@@ -126,6 +126,12 @@ class PGNInput {
     /// @return pointer to the current cursor position into the underlying buffer.
     const char *data() const { return cur_; }
 
+    /// @return pointer to the last position into the underlying buffer.
+    const char *end() const { return end_; }
+
+    /// @return pointer to the first position into the underlying buffer.
+    const char *begin() const { return begin_; }
+
     /// @return number of bytes remaining from cursor to end.
     size_t remaining() const { return static_cast<size_t>(end_ - cur_); }
 
@@ -151,10 +157,15 @@ class PGNInput {
 /// in the input).  The visitor receives callbacks in document order.
 class PGNParser {
   public:
-    explicit PGNParser(PGNVisitor &visitor);
+    PGNParser(PGNVisitor &visitor) : visitor_(visitor) {}
 
-    /// Parse a single game (tag section + movetext).  Not thread-safe.
-    void parse(PGNInput &input);
+    /// Parse one game: tag section then movetext.
+    /// Calls `onTag()`, `onMove()`, `onComment()`, … via the visitor.
+    void parse(PGNInput &input) {
+        input_ = &input;
+        parseTagSection();
+        parseMovetext(false);
+    }
     void parse(std::string_view data) {
         PGNInput in(data);
         parse(in);
@@ -171,7 +182,6 @@ class PGNParser {
 
   private:
     std::string tagValue_;
-
     void parseLineComment();
     void parseTagSection();
     void parseTag();

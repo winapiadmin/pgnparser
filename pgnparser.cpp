@@ -20,7 +20,11 @@
 #include <algorithm>
 #include <climits>
 #include <cstring>
-
+#ifdef _MSC_VER
+#define _forceinline __forceinline
+#else
+#define _forceinline __attribute__((always_inline))
+#endif
 namespace pgn {
 
 /// Count trailing zeros in a 64-bit word.
@@ -29,7 +33,7 @@ namespace pgn {
 /// `__builtin_ctzll` on GCC/Clang) with a De Bruijn fallback.
 /// Used by the SWAR delimiter scanner to find the byte offset
 /// of the first matching delimiter.
-static inline int ctz(uint64_t x) {
+static _forceinline int ctz(uint64_t x) {
 #if defined(_MSC_VER)
     unsigned long index;
     _BitScanForward64(&index, x);
@@ -54,7 +58,7 @@ static inline int ctz(uint64_t x) {
 ///
 ///   "!"  → 1,  "?"  → 2,  "!!" → 3,  "?!" → 6,
 ///   "!?" → 5,  "??" → 4,  else → 0.
-static int nagFromSymbols(const char *sym, size_t len) {
+_forceinline static int nagFromSymbols(const char *sym, size_t len) {
     if (len == 2) {
         if (sym[0] == '!' && sym[1] == '!')
             return 3;
@@ -73,15 +77,6 @@ static int nagFromSymbols(const char *sym, size_t len) {
     return 0;
 }
 
-PGNParser::PGNParser(PGNVisitor &visitor) : visitor_(visitor) {}
-
-/// Parse one game: tag section then movetext.
-/// Calls `onTag()`, `onMove()`, `onComment()`, … via the visitor.
-void PGNParser::parse(PGNInput &input) {
-    input_ = &input;
-    parseTagSection();
-    parseMovetext(false);
-}
 
 /// Parse all games in the input until EOF.
 ///
@@ -110,11 +105,11 @@ void PGNParser::parseAll(PGNInput &input) {
 ///     with a single `memchr` per tag — no key/value parsing, zero callbacks.
 ///   - **Full parse**: calls `parseTag()` for each tag, which invokes
 ///     `visitor_.onTag()`.
-void PGNParser::parseTagSection() {
+_forceinline void PGNParser::parseTagSection() {
     if (!visitor_.wantsTags()) {
         // Batch-skip entire tag section
         const char *p = input_->data();
-        const char *end = p + input_->remaining();
+        const char *end = input_->end();
         while (true) {
             while (p < end) {
                 unsigned char c = static_cast<unsigned char>(*p);
@@ -164,7 +159,7 @@ void PGNParser::parseTagSection() {
 ///
 /// Standard NAG values (1–6) for inline symbols are hard-coded;
 /// numeric NAGs are parsed via `readNumber()`.
-void PGNParser::parseNAG() {
+_forceinline void PGNParser::parseNAG() {
     consume('$'); // consume leading '$'
 
     // Read first 2 chars at once to avoid repeated startsWith() calls
@@ -203,13 +198,13 @@ void PGNParser::parseNAG() {
 /// sequences are present, the value is passed as a `std::string_view`
 /// directly into the mapped buffer (zero copy).  Escaped values
 /// are unescaped into the internal `tagValue_` string.
-void PGNParser::parseTag() {
+_forceinline void PGNParser::parseTag() {
     consume('[');
     skipWhitespace();
 
     // ---------- Key (direct pointer access) ----------
     const char *p = input_->data();
-    const char *end = p + input_->remaining();
+    const char *end = input_->end();
     const char *keyStart = p;
 
     while (p < end) {
@@ -224,7 +219,7 @@ void PGNParser::parseTag() {
 
     skipWhitespace();
     p = input_->data();
-    end = p + input_->remaining();
+    // end = p + input_->remaining();
 
     if (p >= end || *p != '"') {
         const char *q = p;
@@ -243,7 +238,7 @@ void PGNParser::parseTag() {
     bool escaped = false;
 
     p = valueStart;
-    end = p + input_->remaining();
+    //end = p + input_->remaining();
 
     while (p < end) {
         if (*p == '\\') {
@@ -297,7 +292,7 @@ void PGNParser::parseTag() {
 }
 namespace {
 // Fast-forward past whitespace characters using a single-byte lookup
-static inline const char *skipWhitespace(const char *p, const char *end) noexcept {
+static _forceinline const char *skipWhitespace(const char *p, const char *end) noexcept {
     while (p < end) {
         unsigned char c = static_cast<unsigned char>(*p);
         // Fast check: all 4 whitespace chars are <= ' ' (0x20)
@@ -319,7 +314,7 @@ static inline const char *skipWhitespace(const char *p, const char *end) noexcep
 /// Uses a char dispatch table (`case '*'`, `case '1'`, `case '0'`) with
 /// direct memcmp-length checks to avoid branching on the full string.
 /// @return true when a result marker was found and consumed.
-bool PGNParser::checkEndOfGame(const char *base, const char *end, const char *p, char c) {
+_forceinline bool PGNParser::checkEndOfGame(const char *base, const char *end, const char *p, char c) {
     const size_t rem = static_cast<size_t>(end - p);
 
     switch (c) {
@@ -381,10 +376,10 @@ bool PGNParser::checkEndOfGame(const char *base, const char *end, const char *p,
 /// Handles: SAN moves, NAGs (`$` + `!?`), brace comments `{…}`,
 /// semicolon line comments `;…`, variations `(…)`, move numbers,
 /// and game-termination markers.  Recurses for nested variations.
-void PGNParser::parseMovetext(bool inVariation) {
+_forceinline void PGNParser::parseMovetext(bool inVariation) {
     while (true) {
         const char *base = input_->data();
-        const char *end = base + input_->remaining();
+        const char *end = input_->end();
         const char *p = pgn::skipWhitespace(base, end);
 
         input_->consume(static_cast<size_t>(p - base));
@@ -392,7 +387,7 @@ void PGNParser::parseMovetext(bool inVariation) {
             break;
 
         base = input_->data();
-        end = base + input_->remaining();
+        //end = base + input_->remaining();
         char c = *base;
 
         if (checkEndOfGame(base, end, base + 1, c))
@@ -478,7 +473,7 @@ void PGNParser::parseMovetext(bool inVariation) {
 /*
  * Skip movetext section to find the next game boundary.
  *
- * Uses SWAR (Sub-Word Parallelism) to scan 8 bytes at a time for three
+ * Uses SWAR (SIMD Within A Register) to scan 8 bytes at a time for three
  * delimiter bytes (\n, {, ;) using only scalar integer arithmetic:
  *
  *   For each delimiter D, XOR the 8-byte word with DDDDDDDD so that
@@ -493,9 +488,9 @@ void PGNParser::parseMovetext(bool inVariation) {
  * This avoids 3 comparisons and 1 branch per byte (original loop) at the
  * cost of ~15 ALU ops per 8 bytes — about 4× fewer ops overall.
  */
-void PGNParser::skipMovetext() {
+_forceinline void PGNParser::skipMovetext() {
     const char *base = input_->data();
-    const char *end = base + input_->remaining();
+    const char *end = input_->end(); // base + input_->remaining();
     const char *p = base;
 
     while (p < end) {
@@ -570,35 +565,55 @@ void PGNParser::skipMovetext() {
 
 /// Parse a brace comment `{…}` and pass the trimmed text to the visitor.
 /// Leading/trailing whitespace inside the braces is stripped.
-void PGNParser::parseComment() {
+_forceinline void PGNParser::parseComment() {
     consume('{');
 
     const char *start = input_->data();
-    const char *end = start + input_->remaining();
+    const char *end = input_->end(); // start + input_->remaining();
     const char *q = start;
+
+    constexpr uint64_t ones = 0x0101010101010101ULL;
+    constexpr uint64_t high = 0x8080808080808080ULL;
+    constexpr uint64_t brace = 0x7D7D7D7D7D7D7D7DULL;
+
+    while (static_cast<size_t>(end - q) >= sizeof(uint64_t)) {
+        uint64_t x;
+        std::memcpy(&x, q, sizeof(x));
+
+        x ^= brace;
+
+        const uint64_t hits = (x - ones) & ~x & high;
+        if (hits) {
+            q += ctz(hits) >> 3;
+            break;
+        }
+
+        q += sizeof(uint64_t);
+    }
+
+    // Handle the tail / the byte containing the match.
     while (q < end && *q != '}')
         ++q;
+
     input_->consume(static_cast<size_t>(q - start));
-    if (!input_->eof() && input_->peek() == '}')
-        input_->read();
+
+    if (q < end)
+        input_->consume(1);
 
     std::string_view sv(start, static_cast<size_t>(q - start));
+
     size_t left = 0;
     size_t right = sv.size();
 
     while (left < right) {
-        unsigned char c = static_cast<unsigned char>(sv[left]);
-        if (c > 0x20)
-            break;
+        const unsigned char c = static_cast<unsigned char>(sv[left]);
         if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
             break;
         ++left;
     }
 
     while (right > left) {
-        unsigned char c = static_cast<unsigned char>(sv[right - 1]);
-        if (c > 0x20)
-            break;
+        const unsigned char c = static_cast<unsigned char>(sv[right - 1]);
         if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
             break;
         --right;
@@ -609,11 +624,11 @@ void PGNParser::parseComment() {
 /// Parse a semicolon line comment `;…` until the next newline.
 /// Leading/trailing whitespace is stripped from the comment text
 /// before it is passed to the visitor.
-void PGNParser::parseLineComment() {
+_forceinline void PGNParser::parseLineComment() {
     consume(';');
 
     const char *start = input_->data();
-    const char *end = start + input_->remaining();
+    const char *end = input_->end(); // start + input_->remaining();
     const char *q = start;
     while (q < end && *q != '\n')
         ++q;
@@ -651,7 +666,7 @@ void PGNParser::parseLineComment() {
 /// Parse a parenthesised variation `(…)`.  Calls the visitor's
 /// onVariationStart/onVariationEnd and recursively invokes
 /// parseMovetext with `inVariation = true`.
-void PGNParser::parseVariation() {
+_forceinline void PGNParser::parseVariation() {
     consume('(');
     visitor_.onVariationStart();
     parseMovetext(true);
@@ -662,19 +677,17 @@ void PGNParser::parseVariation() {
 
 /// Consume the game-termination marker at the current position.
 /// Delegates to `checkEndOfGame()`.
-void PGNParser::parseResult() {
-    checkEndOfGame(input_->data(), input_->data() + input_->remaining(), input_->data(), input_->peek());
-}
+_forceinline void PGNParser::parseResult() { checkEndOfGame(input_->data(), input_->end(), input_->data(), input_->peek()); }
 
 /// Read a SAN (Standard Algebraic Notation) move string from the input.
 ///
 /// Stops at whitespace, comment/variation delimiters, NAG markers,
 /// or after `MAX_MOVE_LENGTH` characters (15).  Returns a view into
 /// the underlying buffer — no copying.
-std::string_view PGNParser::readMove() {
+_forceinline std::string_view PGNParser::readMove() {
     const char *start = input_->data();
     const char *p = start;
-    const char *end = start + input_->remaining();
+    const char *end = input_->end();
     constexpr size_t MAX_MOVE_LENGTH = 15;
 
     while (p < end && static_cast<size_t>(p - start) < MAX_MOVE_LENGTH) {
@@ -698,10 +711,10 @@ std::string_view PGNParser::readMove() {
 
 /// Parse a non-negative decimal integer from the current input position.
 /// Advances the cursor past all consecutive digit characters.
-int PGNParser::readNumber() {
+_forceinline int PGNParser::readNumber() {
     int num = 0;
     const char *p = input_->data();
-    const char *end = p + input_->remaining();
+    const char *end = input_->end();
 
     while (p < end) {
         unsigned d = static_cast<unsigned>(*p) - '0';

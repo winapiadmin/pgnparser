@@ -26,22 +26,14 @@ struct TestVisitor : pgn::PGNVisitor {
     void onMove(std::string_view san) override { sans++; }
     void onComment(std::string_view text) override { comments++; }
     void onVariationEnd() override { variations++; }
-    void onGameEnd(std::string_view result) override { outcomes++; }
     void onNAG(int nag) override { nags++; }
+    void onGameEnd(std::string_view result) override { outcomes++; }
     bool onGameStart() override {
         games++;
         return true;
     }
 };
 
-std::string read_file(std::string path) {
-    std::ifstream file(path, std::ios::in | std::ios::binary);
-    if (!file)
-        return "";
-
-    // Construct the string using stream iterator boundaries
-    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-}
 
 int main(int argc, char **argv) {
     if (argc == 1) {
@@ -65,7 +57,8 @@ int main(int argc, char **argv) {
            printer.comments,
            printer.variations,
            printer.outcomes);
-    std::cout << "Time = " << elapsed.count() << " s\n";
-    std::cout << "Speed = " << (printer.games / elapsed.count()) << " games/s\n";
+    printf("Time = %f\n", elapsed.count());
+    printf("Speed = %f games/s, or %f MB/s", printer.games / elapsed.count(), (input.end() - input.begin()) / elapsed.count()/1048576);
+
     return 0;
 }

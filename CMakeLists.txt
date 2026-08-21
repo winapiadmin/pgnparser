@@ -9,6 +9,7 @@ option(PGNPARSER_BUILD_EXPORT "Build pgnexport (requires pulling chesslib)" OFF)
 option(PGNPARSER_BUILD_TESTS "Build tests" ON)
 
 add_library(pgnparser STATIC pgnparser.cpp pgnparser.hpp)
+target_include_directories(pgnparser PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 if (PGNPARSER_BUILD_EXPORT)
     include(FetchContent)
