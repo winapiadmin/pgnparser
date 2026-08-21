@@ -1,0 +1,19 @@
+[Event "?"]
+[Site "?"]
+[Date "2026.06.20"]
+[Round "?"]
+[White "prev_internal_engine"]
+[Black "internal_engine"]
+[Result "0-1"]
+[GameId "UqWasVld"]
+[WhiteElo "?"]
+[BlackElo "?"]
+[Variant "Standard"]
+[TimeControl "600+6"]
+[ECO "A00"]
+[Opening "Van Geet Opening"]
+[Termination "Unknown"]
+
+1. Nc3 g6 2. d4 Bg7 3. Nf3 a6 4. Be3 e6 5. Qd2 Ne7 6. O-O-O Nbc6 7. g4 h5 8. gxh5 Rxh5 9. Bg2 d5 10. Kb1 Nf5 11. Na4 Ra7 12. Nc5 b6 13. Nb3 a5 14. Bg5 f6 15. Bf4 a4 16. Nc1 g5 17. Be3 Qe7 18. Nd3 a3 19. Qc3 Bd7 20. bxa3 Rxa3 21. Qd2 Na7 22. Qc1 Nxe3 23. Qxe3 Nb5 24. Rde1 Bh6 25. Qc1 Nc3+ 26. Kb2 g4 27. e3 gxf3 28. Bxf3 Rf5 29. Bg4 Rxf2 30. Rhg1 Ba4 31. Bh5+ Kf8 32. Re2 Nxe2 33. Qd2 Rxd3 34. Qxd3 Qb4+ 35. Ka1 Nxg1 36. a3 Bxc2 37. axb4 Bxd3 38. Bd1 Bxe3 39. Bc2 Rxc2 40. h4 Re2 41. h5 Bxd4# 0-1
+
+
