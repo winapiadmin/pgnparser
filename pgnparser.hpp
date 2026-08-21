@@ -164,7 +164,14 @@ class PGNParser {
     void parse(PGNInput &input) {
         input_ = &input;
         parseTagSection();
-        parseMovetext(false);
+        if (input_->eof())
+            return;
+        if (visitor_.onGameStart()) {
+            parseMovetext(false);
+        } else {
+            skipMovetext();
+            visitor_.onGameEnd({});
+        }
     }
     void parse(std::string_view data) {
         PGNInput in(data);
