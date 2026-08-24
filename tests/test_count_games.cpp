@@ -90,7 +90,7 @@ int main() {
             {                               "empty_body.pgn", 1 }, // game 1 has no result marker
             {                                     "skip.pgn", 2 },
             {                                 "multiple.pgn", 4 },
-            {                                "test_edge.pgn", 2 },
+            {                                "test_edge.pgn", 3 },
             {                         "backslash_header.pgn", 1 }
         };
         for (auto& f : files) {

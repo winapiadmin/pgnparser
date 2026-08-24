@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstring>
+#include <cstdint>
 #include <array>
 #ifdef _MSC_VER
 #define _forceinline __forceinline
@@ -29,16 +30,48 @@
 namespace pgn {
 
 namespace {
-// Fast-forward past whitespace characters using a single-byte lookup
+// Fast-forward past whitespace characters using a single-byte lookup.
+// The `c > 0x20` check is a fast path: all four whitespace bytes are
+// <= 0x20, so it rules out the common case (ordinary printable move/tag
+// text) in one comparison instead of four. Matches PGNInput::skipWhitespace()
+// in the header, which uses the same shortcut.
 static _forceinline const char *skipWhitespace(const char *p, const char *end) noexcept {
     while (p < end) {
         unsigned char c = static_cast<unsigned char>(*p);
+        if (c > 0x20)
+            break;
         if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
             break;
         ++p;
     }
     return p;
 }
+
+// Lookup table marking the bytes that matter while scanning inside a tag
+// pair: '\n' (line boundary — tags never span lines), '"' (quote toggle),
+// '\\' (escape), ']' (tag close). Ordinary bytes — the overwhelming
+// majority of tag key/value text — hit a single table lookup instead of
+// the 3-4 sequential comparisons the state machine needs for these four.
+inline constexpr auto kIsTagSpecial = [] {
+    std::array<bool, 256> t{};
+    t[static_cast<unsigned char>('\n')] = true;
+    t[static_cast<unsigned char>('"')] = true;
+    t[static_cast<unsigned char>('\\')] = true;
+    t[static_cast<unsigned char>(']')] = true;
+    return t;
+}();
+
+// Same idea for scanning a tag's already-opened quoted value: only '\n'
+// (line boundary), '"' (close), and '\\' (escape) matter — ']' is
+// ordinary text there, so it's deliberately left out to avoid stopping
+// on it.
+inline constexpr auto kIsTagValueSpecial = [] {
+    std::array<bool, 256> t{};
+    t[static_cast<unsigned char>('\n')] = true;
+    t[static_cast<unsigned char>('"')] = true;
+    t[static_cast<unsigned char>('\\')] = true;
+    return t;
+}();
 
 } // namespace
 /// Count trailing zeros in a 64-bit word.
@@ -117,25 +150,56 @@ _forceinline void PGNParser::parseTagSection() {
             p = skipWhitespace(p, end);
             if (p >= end || *p != '[')
                 break;
+            const char *tagStart = p;
             ++p; // skip '['
             bool inString = false;
-            bool escaped = false;
+            bool closed = false;
+            // Tag pairs never span a line, so a '\n' before the matching
+            // ']' (in or out of a string) means this tag is malformed —
+            // stop scanning instead of letting `inString` desync against
+            // the rest of the file. Ordinary bytes take a single table
+            // lookup; only '\n' / '"' / '\\' / ']' fall into the slower
+            // branches below. An escaped byte is consumed right where the
+            // backslash is found (no persistent "escaped" flag to check
+            // on every subsequent iteration).
             while (p < end) {
-                char ch = *p++;
-                if (escaped) {
-                    escaped = false;
+                if (!kIsTagSpecial[static_cast<unsigned char>(*p)]) {
+                    ++p;
                     continue;
                 }
-                if (inString && ch == '\\') {
-                    escaped = true;
-                    continue;
+                char ch = *p++;
+                if (ch == '\n') {
+                    --p; // leave the newline for the resync scan below
+                    break;
+                }
+                if (ch == '\\') {
+                    if (inString) {
+                        if (p < end && *p != '\n')
+                            ++p; // consume the escaped byte literally
+                        else
+                            break; // backslash at EOF/before '\n': malformed
+                    }
+                    continue; // backslash outside a string is ordinary text
                 }
                 if (ch == '"') {
                     inString = !inString;
                     continue;
                 }
-                if (!inString && ch == ']')
+                if (!inString && ch == ']') {
+                    closed = true;
                     break;
+                }
+            }
+            if (!closed) {
+                // Malformed tag: discard the rest of this line and resync
+                // at the next one instead of consuming the whole buffer.
+                const char *lineEnd = p;
+                while (lineEnd < end && *lineEnd != '\n')
+                    ++lineEnd;
+                if (lineEnd < end)
+                    ++lineEnd; // consume the newline
+                visitor_.onError(std::string_view(tagStart, static_cast<size_t>(lineEnd - tagStart)));
+                p = lineEnd;
             }
         }
         input_->consume(static_cast<size_t>(p - input_->data()));
@@ -195,6 +259,7 @@ void PGNParser::parseNAG() {
 /// directly into the mapped buffer (zero copy).  Escaped values
 /// are unescaped into the internal `tagValue_` string.
 void PGNParser::parseTag() {
+    const char *tagLineStart = input_->data(); // position of '['
     consume('[');
     input_->skipWhitespace();
 
@@ -215,7 +280,6 @@ void PGNParser::parseTag() {
 
     input_->skipWhitespace();
     p = input_->data();
-    // end = p + input_->remaining();
 
     if (p >= end || *p != '"') {
         const char *q = p;
@@ -234,17 +298,40 @@ void PGNParser::parseTag() {
     bool escaped = false;
 
     p = valueStart;
-    //end = p + input_->remaining();
 
+    // Tag pairs never span a line, so stop at '\n' as well as the closing
+    // quote — an unescaped newline means this value never actually closed
+    // (e.g. a trailing '\"' that escaped the quote instead of ending it).
     while (p < end) {
-        if (*p == '\\') {
+        if (!kIsTagValueSpecial[static_cast<unsigned char>(*p)]) {
+            ++p;
+            continue;
+        }
+        char c = *p;
+        if (c == '\n')
+            break;
+        if (c == '\\' && p + 1 < end && p[1] != '\n') {
             escaped = true;
             p += 2; // skip '\' and the escaped char
             continue;
         }
-        if (*p == '"')
+        if (c == '"')
             break;
-        ++p;
+        ++p; // '\\' at EOF or immediately before '\n': treat as literal text
+    }
+
+    const bool closed = (p < end && *p == '"');
+    if (!closed) {
+        // Malformed tag: discard the rest of this line and resync at the
+        // next one instead of misreading a later tag's quote as ours.
+        const char *lineEnd = p;
+        while (lineEnd < end && *lineEnd != '\n')
+            ++lineEnd;
+        if (lineEnd < end)
+            ++lineEnd; // consume the newline
+        input_->consume(static_cast<size_t>(lineEnd - valueStart));
+        visitor_.onError(std::string_view(tagLineStart, static_cast<size_t>(lineEnd - tagLineStart)));
+        return;
     }
 
     input_->consume(static_cast<size_t>(p - valueStart));
@@ -287,12 +374,12 @@ void PGNParser::parseTag() {
     visitor_.onTag(key, tagValue_);
 }
 
-/// Check if the byte at `p` begins a game-termination marker and, if so,
-/// consume the input up to and including it.
-///
-/// Recognised results: `*`, `1-0`, `0-1`, `1/2-1/2`.
-/// Uses a char dispatch table (`case '*'`, `case '1'`, `case '0'`) with
-/// direct memcmp-length checks to avoid branching on the full string.
+/// Check whether the movetext at `[base, end)` ends with a
+/// game-termination marker: `*`, `1-0`, `0-1`, or `1/2-1/2`. Requires
+/// `c == *base` and `p == base + 1` — the caller already knows the first
+/// character (via its own dispatch) and this checks the rest with direct
+/// indexed comparisons rather than a second full-string scan. On a match,
+/// consumes the marker and calls `onGameEnd()`.
 /// @return true when a result marker was found and consumed.
 _forceinline bool PGNParser::checkEndOfGame(const char *base, const char *end, const char *p, char c) {
     const size_t rem = static_cast<size_t>(end - p);
@@ -321,28 +408,6 @@ _forceinline bool PGNParser::checkEndOfGame(const char *base, const char *end, c
     case '0':
         if (rem >= 2 && p[0] == '-' && p[1] == '1') {
             size_t len = static_cast<size_t>(p + 2 - base);
-            input_->consume(len);
-            visitor_.onGameEnd(std::string_view(base, len));
-            return true;
-        }
-        break;
-    default:
-        if (rem >= 3) {
-            if (p[0] == '1' && p[1] == '-' && p[2] == '0') {
-                size_t len = static_cast<size_t>(p + 3 - base);
-                input_->consume(len);
-                visitor_.onGameEnd(std::string_view(base, len));
-                return true;
-            }
-            if (p[0] == '0' && p[1] == '-' && p[2] == '1') {
-                size_t len = static_cast<size_t>(p + 3 - base);
-                input_->consume(len);
-                visitor_.onGameEnd(std::string_view(base, len));
-                return true;
-            }
-        }
-        if (rem >= 7 && p[0] == '1' && p[1] == '/' && p[2] == '2' && p[3] == '-' && p[4] == '1' && p[5] == '/' && p[6] == '2') {
-            size_t len = static_cast<size_t>(p + 7 - base);
             input_->consume(len);
             visitor_.onGameEnd(std::string_view(base, len));
             return true;
@@ -445,9 +510,21 @@ void PGNParser::parseMovetext() {
             break;
 
         case pgn::TokAction::VarOpen:
-            visitor_.onVariationStart();
-            input_->consume(1);
-            parseMovetext<true>();
+            input_->consume(1); // '('
+            if (variationDepth_ < kMaxVariationDepth) {
+                visitor_.onVariationStart();
+                ++variationDepth_;
+                parseMovetext<true>();
+                --variationDepth_;
+            } else {
+                // Nesting this deep is never legitimate PGN and would
+                // recurse the call stack unboundedly; flatten iteratively
+                // instead of risking a stack overflow on adversarial
+                // input. skipVariationBody() consumes through the
+                // matching ')' itself.
+                visitor_.onError("variation nesting exceeded max depth; flattened");
+                skipVariationBody();
+            }
             break;
 
         case pgn::TokAction::VarClose:
@@ -675,21 +752,41 @@ void PGNParser::parseLineComment() {
     visitor_.onComment(sv.substr(left, right - left));
 }
 
-/// Parse a parenthesised variation `(…)`.  Calls the visitor's
-/// onVariationStart/onVariationEnd and recursively invokes
-/// parseMovetext with `inVariation = true`.
-void PGNParser::parseVariation() {
-    consume('(');
-    visitor_.onVariationStart();
-    parseMovetext<true>();
-    if (!input_->eof() && input_->peek() == ')')
-        input_->read(); // consume ')'
-    visitor_.onVariationEnd();
+/// Iteratively consume the body of a variation whose matching ')' hasn't
+/// been located yet, without recursing further. Used once nesting passes
+/// `kMaxVariationDepth` so stack usage is bounded by input size rather
+/// than by how deep the input actually nests. `{...}` and `;...` comments
+/// are skipped structurally (so parens inside them don't upset the depth
+/// count) but not reported to the visitor — this region is being
+/// discarded, not parsed.
+void PGNParser::skipVariationBody() {
+    int depth = 0; // relative to the '(' the caller already consumed
+    while (!input_->eof()) {
+        char c = input_->read();
+        switch (c) {
+        case '(':
+            ++depth;
+            break;
+        case ')':
+            if (depth == 0)
+                return; // matches the caller's already-consumed '('
+            --depth;
+            break;
+        case '{':
+            while (!input_->eof() && input_->peek() != '}')
+                input_->read();
+            if (!input_->eof())
+                input_->read(); // consume '}'
+            break;
+        case ';':
+            while (!input_->eof() && input_->peek() != '\n')
+                input_->read();
+            break;
+        default:
+            break;
+        }
+    }
 }
-
-/// Consume the game-termination marker at the current position.
-/// Delegates to `checkEndOfGame()`.
-_forceinline void PGNParser::parseResult() { checkEndOfGame(input_->data(), input_->end(), input_->data(), input_->peek()); }
 inline constexpr auto kIsMoveChar = [] {
     std::array<bool, 256> t{};
     for (unsigned char c = 0; c < 128; ++c) {
