@@ -74,27 +74,30 @@ int main() {
             const char* name;
             int expected;
         } files[] = {
-            {"test1.pgn", 1},
-            {"test2.pgn", 1},
-            {"test3.pgn", 1},
-            {"test4.pgn", 3},
-            {"test5.pgn", 1},
-            {"no_moves.pgn", 0},           // no body at all (tags only)
-            {"no_moves_but_game_termination.pgn", 1},
-            {"no_moves_but_game_termination_2.pgn", 1},
-            {"no_moves_but_game_termination_3.pgn", 1},
-            {"no_moves_two_games.pgn", 2},
-            {"no_moves_but_game_termination_multiple.pgn", 2},
-            {"no_moves_but_game_termination_multiple_2.pgn", 3},
-            {"no_result.pgn", 1},
-            {"empty_body.pgn", 1},          // game 1 has no result marker
-            {"skip.pgn", 2},
-            {"multiple.pgn", 4},
+            {                                    "test1.pgn", 1 },
+            {                                    "test2.pgn", 1 },
+            {                                    "test3.pgn", 1 },
+            {                                    "test4.pgn", 3 },
+            {                                    "test5.pgn", 1 },
+            {                                 "no_moves.pgn", 0 }, // no body at all (tags only)
+            {            "no_moves_but_game_termination.pgn", 1 },
+            {          "no_moves_but_game_termination_2.pgn", 1 },
+            {          "no_moves_but_game_termination_3.pgn", 1 },
+            {                       "no_moves_two_games.pgn", 2 },
+            {   "no_moves_but_game_termination_multiple.pgn", 2 },
+            { "no_moves_but_game_termination_multiple_2.pgn", 3 },
+            {                                "no_result.pgn", 1 },
+            {                               "empty_body.pgn", 1 }, // game 1 has no result marker
+            {                                     "skip.pgn", 2 },
+            {                                 "multiple.pgn", 4 },
+            {                                "test_edge.pgn", 2 },
+            {                         "backslash_header.pgn", 1 }
         };
         for (auto& f : files) {
             std::string path = TEST_DIR + std::string(f.name);
             int skipCount = count_skip_file(path);
             int fullCount = count_full_file(path);
+            std::cerr<<path<<'\n';
             CHECK_EQ(skipCount, f.expected);
             CHECK_EQ(fullCount, f.expected);
         }

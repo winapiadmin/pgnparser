@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstring>
+#include <array>
 #ifdef _MSC_VER
 #define _forceinline __forceinline
 #else
@@ -27,6 +28,19 @@
 #endif
 namespace pgn {
 
+namespace {
+// Fast-forward past whitespace characters using a single-byte lookup
+static _forceinline const char *skipWhitespace(const char *p, const char *end) noexcept {
+    while (p < end) {
+        unsigned char c = static_cast<unsigned char>(*p);
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+            break;
+        ++p;
+    }
+    return p;
+}
+
+} // namespace
 /// Count trailing zeros in a 64-bit word.
 ///
 /// Wraps platform intrinsics (`_BitScanForward64` on MSVC,
@@ -40,17 +54,6 @@ static _forceinline int ctz(uint64_t x) {
     return static_cast<int>(index);
 #elif defined(__GNUC__) || defined(__clang__)
     return __builtin_ctzll(x);
-#else
-    static const int MultiplyDeBruijnBitPosition[64] = {
-        0,  1,  2,  53, 3,  7,  54, 27, 4,  38, 41, 8,  34, 55, 48, 28, 62, 5,  39, 46, 44, 42,
-        22, 9,  24, 35, 59, 56, 49, 18, 29, 11, 63, 52, 6,  26, 37, 40, 33, 47, 61, 45, 43, 21,
-        23, 58, 17, 10, 51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12,
-    };
-
-    if (x == 0)
-        return 64;
-
-    return MultiplyDeBruijnBitPosition[((uint64_t)((x & -x) * 0x03F79D71B4CB0A89ULL)) >> 58];
 #endif
 }
 
@@ -90,7 +93,7 @@ void PGNParser::parseAll(PGNInput &input) {
         if (input_->eof())
             break;
         if (visitor_.onGameStart()) {
-            parseMovetext(false);
+            parseMovetext();
         } else {
             skipMovetext();
             visitor_.onGameEnd(std::string_view());
@@ -102,7 +105,7 @@ void PGNParser::parseAll(PGNInput &input) {
 ///
 /// Two code paths:
 ///   - **Skip** (`wantsTags() == false`): batch-scan for `[` … `]` fences
-///     with a single `memchr` per tag — no key/value parsing, zero callbacks.
+///     with a manual search loop per tag — no key/value parsing, zero callbacks.
 ///   - **Full parse**: calls `parseTag()` for each tag, which invokes
 ///     `visitor_.onTag()`.
 _forceinline void PGNParser::parseTagSection() {
@@ -111,14 +114,7 @@ _forceinline void PGNParser::parseTagSection() {
         const char *p = input_->data();
         const char *end = input_->end();
         while (true) {
-            while (p < end) {
-                unsigned char c = static_cast<unsigned char>(*p);
-                if (c > 0x20)
-                    break;
-                if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
-                    break;
-                ++p;
-            }
+            p = skipWhitespace(p, end);
             if (p >= end || *p != '[')
                 break;
             ++p; // skip '['
@@ -147,7 +143,7 @@ _forceinline void PGNParser::parseTagSection() {
     }
 
     while (true) {
-        skipWhitespace();
+        input_->skipWhitespace();
         if (input_->eof() || input_->peek() != '[')
             break;
         parseTag();
@@ -159,7 +155,7 @@ _forceinline void PGNParser::parseTagSection() {
 ///
 /// Standard NAG values (1–6) for inline symbols are hard-coded;
 /// numeric NAGs are parsed via `readNumber()`.
-_forceinline void PGNParser::parseNAG() {
+void PGNParser::parseNAG() {
     consume('$'); // consume leading '$'
 
     // Read first 2 chars at once to avoid repeated startsWith() calls
@@ -198,9 +194,9 @@ _forceinline void PGNParser::parseNAG() {
 /// sequences are present, the value is passed as a `std::string_view`
 /// directly into the mapped buffer (zero copy).  Escaped values
 /// are unescaped into the internal `tagValue_` string.
-_forceinline void PGNParser::parseTag() {
+void PGNParser::parseTag() {
     consume('[');
-    skipWhitespace();
+    input_->skipWhitespace();
 
     // ---------- Key (direct pointer access) ----------
     const char *p = input_->data();
@@ -217,7 +213,7 @@ _forceinline void PGNParser::parseTag() {
     input_->consume(static_cast<size_t>(p - keyStart));
     std::string_view key(keyStart, static_cast<size_t>(p - keyStart));
 
-    skipWhitespace();
+    input_->skipWhitespace();
     p = input_->data();
     // end = p + input_->remaining();
 
@@ -260,7 +256,7 @@ _forceinline void PGNParser::parseTag() {
         if (!input_->eof())
             input_->read(); // closing quote
 
-        skipWhitespace();
+        input_->skipWhitespace();
 
         if (!input_->eof() && input_->peek() == ']')
             input_->read();
@@ -283,29 +279,13 @@ _forceinline void PGNParser::parseTag() {
     if (!input_->eof())
         input_->read(); // closing quote
 
-    skipWhitespace();
+    input_->skipWhitespace();
 
     if (!input_->eof() && input_->peek() == ']')
         input_->read();
 
     visitor_.onTag(key, tagValue_);
 }
-namespace {
-// Fast-forward past whitespace characters using a single-byte lookup
-static _forceinline const char *skipWhitespace(const char *p, const char *end) noexcept {
-    while (p < end) {
-        unsigned char c = static_cast<unsigned char>(*p);
-        // Fast check: all 4 whitespace chars are <= ' ' (0x20)
-        if (c > 0x20)
-            break;
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
-            break;
-        ++p;
-    }
-    return p;
-}
-
-} // namespace
 
 /// Check if the byte at `p` begins a game-termination marker and, if so,
 /// consume the input up to and including it.
@@ -376,7 +356,46 @@ _forceinline bool PGNParser::checkEndOfGame(const char *base, const char *end, c
 /// Handles: SAN moves, NAGs (`$` + `!?`), brace comments `{…}`,
 /// semicolon line comments `;…`, variations `(…)`, move numbers,
 /// and game-termination markers.  Recurses for nested variations.
-_forceinline void PGNParser::parseMovetext(bool inVariation) {
+/// 
+enum class TokAction : uint8_t {
+    Move = 0,     // default: letters, files, most SAN chars
+    WS,           // handled before dispatch, not really needed here
+    MoveNum,      // digits '1'..'9' -> move number
+    ZeroOrCastle, // '0' -> could be "0-1" result or "0-0" castling
+    OneOrResult,  // '1' -> could be "1-0"/"1/2-1/2" result or move number
+    Star,         // '*' -> always a result marker
+    Comment,      // '{'
+    LineComment,  // ';'
+    VarOpen,      // '('
+    VarClose,     // ')'
+    Nag,          // '$'
+    Annotation,   // '!' or '?'
+    Count
+};
+
+inline constexpr auto kActionTable = [] {
+    std::array<TokAction, 256> t{};
+    for (auto &e : t)
+        e = TokAction::Move; // default: SAN move char
+    for (unsigned char d = '1'; d <= '9'; ++d)
+        t[d] = TokAction::MoveNum;
+    t[static_cast<unsigned char>('0')] = TokAction::ZeroOrCastle;
+    t[static_cast<unsigned char>('1')] = TokAction::OneOrResult; // overwrites the loop above for '1'
+    t[static_cast<unsigned char>('*')] = TokAction::Star;
+    t[static_cast<unsigned char>('{')] = TokAction::Comment;
+    t[static_cast<unsigned char>(';')] = TokAction::LineComment;
+    t[static_cast<unsigned char>('(')] = TokAction::VarOpen;
+    t[static_cast<unsigned char>(')')] = TokAction::VarClose;
+    t[static_cast<unsigned char>('$')] = TokAction::Nag;
+    t[static_cast<unsigned char>('!')] = TokAction::Annotation;
+    t[static_cast<unsigned char>('?')] = TokAction::Annotation;
+    return t;
+}();
+template<bool inVariation>
+#ifdef _MSC_VER
+__forceinline
+#endif
+void PGNParser::parseMovetext() {
     while (true) {
         const char *base = input_->data();
         const char *end = input_->end();
@@ -387,29 +406,52 @@ _forceinline void PGNParser::parseMovetext(bool inVariation) {
             break;
 
         base = input_->data();
-        //end = base + input_->remaining();
         char c = *base;
 
-        if (checkEndOfGame(base, end, base + 1, c))
+        switch (pgn::kActionTable[static_cast<unsigned char>(c)]) {
+        case pgn::TokAction::Star:
+            checkEndOfGame(base, end, base + 1, c); // '*' always matches; no fallback needed
             return;
 
-        switch (c) {
-        case '{':
-            parseComment();
+        case pgn::TokAction::OneOrResult:
+            if (checkEndOfGame(base, end, base + 1, c))
+                return;
+            [[fallthrough]]; // wasn't a result -> it's a move number like "1."
+        case pgn::TokAction::MoveNum:
+            while (!input_->eof() && pgn::isDigit(input_->peek()))
+                input_->read();
+            while (!input_->eof() && input_->peek() == '.')
+                input_->read();
             break;
 
-        case ';':
+        case pgn::TokAction::ZeroOrCastle:
+            if (checkEndOfGame(base, end, base + 1, c))
+                return;
+            [[fallthrough]]; // wasn't "0-1" -> it's O-O-style castling text
+        case pgn::TokAction::Move: {
+            std::string_view san = readMove();
+            if (!san.empty())
+                visitor_.onMove(san);
+            else if (pgn::kActionTable[static_cast<unsigned char>(c)] == pgn::TokAction::Move)
+                input_->read(); // hard fallback, same as original
+            break;
+        }
+
+        case pgn::TokAction::Comment:
+            parseComment();
+            break;
+        case pgn::TokAction::LineComment:
             parseLineComment();
             break;
 
-        case '(':
+        case pgn::TokAction::VarOpen:
             visitor_.onVariationStart();
             input_->consume(1);
-            parseMovetext(true);
+            parseMovetext<true>();
             break;
 
-        case ')':
-            if (inVariation) {
+        case pgn::TokAction::VarClose:
+            if constexpr (inVariation) {
                 visitor_.onVariationEnd();
                 input_->consume(1);
                 return;
@@ -417,59 +459,29 @@ _forceinline void PGNParser::parseMovetext(bool inVariation) {
             input_->consume(1);
             break;
 
-        case '$':
+        case pgn::TokAction::Nag:
             parseNAG();
             break;
 
-        case '!':
-        case '?': {
-            const char *p = base;
+        case pgn::TokAction::Annotation: {
+            const char *p2 = base;
             size_t len = 0;
-
-            while (len < 2 && p < end) {
-                char ch = *p;
-                if (ch != '!' && ch != '?')
-                    break;
-                ++p;
+            while (len < 2 && p2 < end && (*p2 == '!' || *p2 == '?')) {
+                ++p2;
                 ++len;
             }
-
             input_->consume(len);
-
             int nag = nagFromSymbols(base, len);
             if (nag != 0)
                 visitor_.onNAG(nag);
             break;
         }
 
-        case 'O': // correct SAN castling
-        case '0': {
-            std::string_view san = readMove();
-            if (!san.empty())
-                visitor_.onMove(san);
-            break;
-        }
-
         default:
-            if (pgn::isDigit(c)) {
-                // Consume move number and trailing dots in one go.
-                while (!input_->eof() && pgn::isDigit(input_->peek()))
-                    input_->read();
-
-                while (!input_->eof() && input_->peek() == '.')
-                    input_->read();
-            } else {
-                std::string_view san = readMove();
-                if (!san.empty())
-                    visitor_.onMove(san);
-                else
-                    input_->read(); // hard fallback
-            }
-            break;
+            break; // unreachable
         }
     }
 }
-
 /*
  * Skip movetext section to find the next game boundary.
  *
@@ -621,10 +633,10 @@ _forceinline void PGNParser::parseComment() {
 
     visitor_.onComment(sv.substr(left, right - left));
 }
-/// Parse a semicolon line comment `;…` until the next newline.
+/// Parse a semicolon line comment `;...` until the next newline.
 /// Leading/trailing whitespace is stripped from the comment text
 /// before it is passed to the visitor.
-_forceinline void PGNParser::parseLineComment() {
+void PGNParser::parseLineComment() {
     consume(';');
 
     const char *start = input_->data();
@@ -666,10 +678,10 @@ _forceinline void PGNParser::parseLineComment() {
 /// Parse a parenthesised variation `(…)`.  Calls the visitor's
 /// onVariationStart/onVariationEnd and recursively invokes
 /// parseMovetext with `inVariation = true`.
-_forceinline void PGNParser::parseVariation() {
+void PGNParser::parseVariation() {
     consume('(');
     visitor_.onVariationStart();
-    parseMovetext(true);
+    parseMovetext<true>();
     if (!input_->eof() && input_->peek() == ')')
         input_->read(); // consume ')'
     visitor_.onVariationEnd();
@@ -678,7 +690,16 @@ _forceinline void PGNParser::parseVariation() {
 /// Consume the game-termination marker at the current position.
 /// Delegates to `checkEndOfGame()`.
 _forceinline void PGNParser::parseResult() { checkEndOfGame(input_->data(), input_->end(), input_->data(), input_->peek()); }
-
+inline constexpr auto kIsMoveChar = [] {
+    std::array<bool, 256> t{};
+    for (unsigned char c = 0; c < 128; ++c) {
+        t[c] = !(c <= 0x20 || // whitespace/control
+                 c == '{' || c == '}' || c == '(' || c == ')' || c == ';' || c == '$' || c == '!' || c == '?');
+    }
+    for (unsigned c = 128; c < 256; ++c)
+        t[c] = false; // matches original c > 0x7A cutoff-ish
+    return t;
+}();
 /// Read a SAN (Standard Algebraic Notation) move string from the input.
 ///
 /// Stops at whitespace, comment/variation delimiters, NAG markers,
@@ -690,17 +711,7 @@ _forceinline std::string_view PGNParser::readMove() {
     const char *end = input_->end();
     constexpr size_t MAX_MOVE_LENGTH = 15;
 
-    while (p < end && static_cast<size_t>(p - start) < MAX_MOVE_LENGTH) {
-        unsigned char c = static_cast<unsigned char>(*p);
-        // Fast ASCII range check for move characters (a-z, A-Z, 0-9, '-', '+', '#', '=')
-        if (c > 0x7A)
-            break;
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
-            break;
-        if (c == '{' || c == '}' || c == '(' || c == ')' || c == ';')
-            break;
-        if (c == '$' || c == '!' || c == '?')
-            break;
+    while (p < end && static_cast<size_t>(p - start) < MAX_MOVE_LENGTH && kIsMoveChar[static_cast<unsigned char>(*p)]) {
         ++p;
     }
 
@@ -708,7 +719,6 @@ _forceinline std::string_view PGNParser::readMove() {
     input_->consume(len);
     return { start, len };
 }
-
 /// Parse a non-negative decimal integer from the current input position.
 /// Advances the cursor past all consecutive digit characters.
 _forceinline int PGNParser::readNumber() {

@@ -89,30 +89,30 @@ class PGNInput {
     }
 
     /// Return the current byte without advancing, or '\0' at EOF.
-    char peek() const { return cur_ == end_ ? '\0' : *cur_; }
+    inline char peek() const { return cur_ == end_ ? '\0' : *cur_; }
 
     /// @return true when the cursor is at the end of input.
-    bool eof() const { return cur_ == end_; }
+    inline bool eof() const { return cur_ == end_; }
 
     /// Read and advance by one byte.  Returns '\0' at EOF.
-    char read() {
+    inline char read() {
         assert(cur_ <= end_ && "Invalid cursor position");
         return cur_ == end_ ? '\0' : *cur_++;
     }
 
     /// Advance the cursor by `n` bytes (clamped to remaining input).
-    void skip(size_t n = 1) { cur_ += (n < remaining() ? n : remaining()); }
+    inline void skip(size_t n = 1) { cur_ += (n < remaining() ? n : remaining()); }
 
     /// Alias for skip().
-    void consume(size_t n) { skip(n); }
+    inline void consume(size_t n) { skip(n); }
 
     /// @return true when the remaining input begins with the given text.
-    bool startsWith(std::string_view text) const {
+    inline bool startsWith(std::string_view text) const {
         return remaining() >= text.size() && std::memcmp(cur_, text.data(), text.size()) == 0;
     }
 
     /// Skip ASCII whitespace bytes (space, tab, \\n, \\r) at the cursor.
-    void skipWhitespace() {
+    inline void skipWhitespace() {
         while (cur_ != end_) {
             unsigned char c = static_cast<unsigned char>(*cur_);
             if (c > 0x20)
@@ -124,22 +124,22 @@ class PGNInput {
     }
 
     /// @return pointer to the current cursor position into the underlying buffer.
-    const char *data() const { return cur_; }
+    inline const char *data() const { return cur_; }
 
     /// @return pointer to the last position into the underlying buffer.
-    const char *end() const { return end_; }
+    inline const char *end() const { return end_; }
 
     /// @return pointer to the first position into the underlying buffer.
-    const char *begin() const { return begin_; }
+    inline const char *begin() const { return begin_; }
 
     /// @return number of bytes remaining from cursor to end.
-    size_t remaining() const { return static_cast<size_t>(end_ - cur_); }
+    inline size_t remaining() const { return static_cast<size_t>(end_ - cur_); }
 
     /// @return absolute byte offset of the cursor from the start of input.
-    size_t offset() const { return static_cast<size_t>(cur_ - begin_); }
+    inline size_t offset() const { return static_cast<size_t>(cur_ - begin_); }
 
     /// @return a view of the remaining input from cursor to end.
-    std::string_view remainingView() const { return std::string_view(cur_, remaining()); }
+    inline std::string_view remainingView() const { return std::string_view(cur_, remaining()); }
 
   private:
     inline static const char s_empty_ = '\0';
@@ -167,7 +167,7 @@ class PGNParser {
         if (input_->eof())
             return;
         if (visitor_.onGameStart()) {
-            parseMovetext(false);
+            parseMovetext();
         } else {
             skipMovetext();
             visitor_.onGameEnd({});
@@ -192,7 +192,8 @@ class PGNParser {
     void parseLineComment();
     void parseTagSection();
     void parseTag();
-    void parseMovetext(bool inVariation = false);
+    template<bool inVariation=false>
+    void parseMovetext();
     void skipMovetext();
     void parseComment();
     void parseVariation();
@@ -201,8 +202,6 @@ class PGNParser {
     bool checkEndOfGame(const char *base, const char *end, const char *p, char c);
     std::string_view readMove();
     int readNumber();
-
-    inline void skipWhitespace() { input_->skipWhitespace(); }
 
     inline void consume(char expected) {
         if (!input_->eof() && input_->peek() == expected)
