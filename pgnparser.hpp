@@ -54,6 +54,10 @@ class PGNInput {
     inline char peek() const { return cur_ == end_ ? '\0' : *cur_; }
     inline bool eof() const { return cur_ == end_; }
 
+    /// Reset the cursor to the start of the input so the same buffer
+    /// (e.g. an mmapped file) can be parsed again without remapping.
+    inline void rewind() { cur_ = begin_; }
+
     inline char read() {
         assert(cur_ <= end_ && "Invalid cursor position");
         return cur_ == end_ ? '\0' : *cur_++;

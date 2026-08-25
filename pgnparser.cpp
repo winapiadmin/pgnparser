@@ -482,12 +482,18 @@ void PGNParser::parseMovetext() {
             if (checkEndOfGame(base, end, base + 1, c))
                 return;
             [[fallthrough]]; // wasn't a result -> it's a move number like "1."
-        case pgn::TokAction::MoveNum:
-            while (!input_->eof() && pgn::isDigit(input_->peek()))
-                input_->read();
-            while (!input_->eof() && input_->peek() == '.')
-                input_->read();
+        case pgn::TokAction::MoveNum: {
+            // Scan digits/dots through raw pointers instead of per-char
+            // peek()/read() calls, then advance the cursor once.
+            const char *q = input_->data();
+            const char *qend = input_->end();
+            while (q < qend && pgn::isDigit(*q))
+                ++q;
+            while (q < qend && *q == '.')
+                ++q;
+            input_->consume(static_cast<size_t>(q - input_->data()));
             break;
+        }
 
         case pgn::TokAction::ZeroOrCastle:
             if (checkEndOfGame(base, end, base + 1, c))
@@ -808,7 +814,12 @@ _forceinline std::string_view PGNParser::readMove() {
     const char *end = input_->end();
     constexpr size_t MAX_MOVE_LENGTH = 15;
 
-    while (p < end && static_cast<size_t>(p - start) < MAX_MOVE_LENGTH && kIsMoveChar[static_cast<unsigned char>(*p)]) {
+    // Precompute the length-cap bound once instead of computing `p - start`
+    // every iteration — turns the per-byte check into a single pointer
+    // comparison, same cost as the `p < end` check it replaces one of.
+    const char *limit = (static_cast<size_t>(end - start) > MAX_MOVE_LENGTH) ? start + MAX_MOVE_LENGTH : end;
+
+    while (p < limit && kIsMoveChar[static_cast<unsigned char>(*p)]) {
         ++p;
     }
 
