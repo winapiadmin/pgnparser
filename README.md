@@ -39,3 +39,5 @@ with stats:
 | shakmaty | https://github.com/niklasf/shakmaty/blob/main/pgn-reader/examples/stats.rs | begin_tags incr games and break |
 | pgnparser | examples/import_example2.cpp | comment overrides except onGameStart |
 | ripgrep | Measure-Command { rg -c -a -F "Event" filename } | |
+
+Game statistics is counted like shakmaty's example (games, tags, sans, nags, comments, variations, outcomes), no-stats only count games.
