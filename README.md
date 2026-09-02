@@ -26,7 +26,7 @@ with lichess on month 12/2015 (without stats):
 | chess-library | 275MiB/s |
 | ripgrep | 1586MiB/s |
 
-with stats:
+with lichess on month 12/2015 (with stats):
 
 | Library | Speed |
 | ---- | ---- |
