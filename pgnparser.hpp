@@ -63,7 +63,14 @@ class PGNInput {
         return cur_ == end_ ? '\0' : *cur_++;
     }
 
-    inline void skip(size_t n = 1) { cur_ += (n < remaining() ? n : remaining()); }
+    inline void skip(size_t n = 1) noexcept {
+        const size_t rem = static_cast<size_t>(end_ - cur_);
+        cur_ += n < rem ? n : rem;
+    }
+    // Internal parser fast path: callers only use this after proving the
+    // requested range is inside [cur_, end_). Avoids a redundant bounds
+    // check and end_-cur_ dependency on the hottest token-advance paths.
+    inline void advance(size_t n) noexcept { cur_ += n; }
     inline void consume(size_t n) { skip(n); }
 
     inline bool startsWith(std::string_view text) const {

@@ -202,7 +202,7 @@ _forceinline void PGNParser::parseTagSection() {
                 p = lineEnd;
             }
         }
-        input_->consume(static_cast<size_t>(p - input_->data()));
+        input_->advance(static_cast<size_t>(p - input_->data()));
         return;
     }
 
@@ -275,7 +275,7 @@ void PGNParser::parseTag() {
         ++p;
     }
 
-    input_->consume(static_cast<size_t>(p - keyStart));
+    input_->advance(static_cast<size_t>(p - keyStart));
     std::string_view key(keyStart, static_cast<size_t>(p - keyStart));
 
     input_->skipWhitespace();
@@ -287,7 +287,7 @@ void PGNParser::parseTag() {
             ++q;
         if (q < end)
             ++q;
-        input_->consume(static_cast<size_t>(q - p));
+        input_->advance(static_cast<size_t>(q - p));
         return;
     }
 
@@ -329,12 +329,12 @@ void PGNParser::parseTag() {
             ++lineEnd;
         if (lineEnd < end)
             ++lineEnd; // consume the newline
-        input_->consume(static_cast<size_t>(lineEnd - valueStart));
+        input_->advance(static_cast<size_t>(lineEnd - valueStart));
         visitor_.onError(std::string_view(tagLineStart, static_cast<size_t>(lineEnd - tagLineStart)));
         return;
     }
 
-    input_->consume(static_cast<size_t>(p - valueStart));
+    input_->advance(static_cast<size_t>(p - valueStart));
     const char *valueEnd = p;
 
     if (!escaped) {
@@ -387,20 +387,20 @@ _forceinline bool PGNParser::checkEndOfGame(const char *base, const char *end, c
     switch (c) {
     case '*': {
         size_t len = static_cast<size_t>(p - base);
-        input_->consume(len);
+        input_->advance(len);
         visitor_.onGameEnd(std::string_view(base, len));
         return true;
     }
     case '1':
         if (rem >= 2 && p[0] == '-' && p[1] == '0') {
             size_t len = static_cast<size_t>(p + 2 - base);
-            input_->consume(len);
+            input_->advance(len);
             visitor_.onGameEnd(std::string_view(base, len));
             return true;
         }
         if (rem >= 6 && p[0] == '/' && p[1] == '2' && p[2] == '-' && p[3] == '1' && p[4] == '/' && p[5] == '2') {
             size_t len = static_cast<size_t>(p + 6 - base);
-            input_->consume(len);
+            input_->advance(len);
             visitor_.onGameEnd(std::string_view(base, len));
             return true;
         }
@@ -408,7 +408,7 @@ _forceinline bool PGNParser::checkEndOfGame(const char *base, const char *end, c
     case '0':
         if (rem >= 2 && p[0] == '-' && p[1] == '1') {
             size_t len = static_cast<size_t>(p + 2 - base);
-            input_->consume(len);
+            input_->advance(len);
             visitor_.onGameEnd(std::string_view(base, len));
             return true;
         }
@@ -466,7 +466,7 @@ void PGNParser::parseMovetext() {
         const char *end = input_->end();
         const char *p = pgn::skipWhitespace(base, end);
 
-        input_->consume(static_cast<size_t>(p - base));
+        input_->advance(static_cast<size_t>(p - base));
         if (input_->eof())
             break;
 
@@ -491,7 +491,7 @@ void PGNParser::parseMovetext() {
                 ++q;
             while (q < qend && *q == '.')
                 ++q;
-            input_->consume(static_cast<size_t>(q - input_->data()));
+            input_->advance(static_cast<size_t>(q - input_->data()));
             break;
         }
 
@@ -516,7 +516,7 @@ void PGNParser::parseMovetext() {
             break;
 
         case pgn::TokAction::VarOpen:
-            input_->consume(1); // '('
+            input_->advance(1); // '('
             if (variationDepth_ < kMaxVariationDepth) {
                 visitor_.onVariationStart();
                 ++variationDepth_;
@@ -536,10 +536,10 @@ void PGNParser::parseMovetext() {
         case pgn::TokAction::VarClose:
             if constexpr (inVariation) {
                 visitor_.onVariationEnd();
-                input_->consume(1);
+                input_->advance(1);
                 return;
             }
-            input_->consume(1);
+            input_->advance(1);
             break;
 
         case pgn::TokAction::Nag:
@@ -553,7 +553,7 @@ void PGNParser::parseMovetext() {
                 ++p2;
                 ++len;
             }
-            input_->consume(len);
+            input_->advance(len);
             int nag = nagFromSymbols(base, len);
             if (nag != 0)
                 visitor_.onNAG(nag);
@@ -649,13 +649,13 @@ _forceinline void PGNParser::skipMovetext() {
             while (s < end && (*s == ' ' || *s == '\t'))
                 ++s;
             if (s < end && (*s == '\n' || *s == '[')) {
-                input_->consume(static_cast<size_t>(p - base));
+                input_->advance(static_cast<size_t>(p - base));
                 return;
             }
         }
     }
 
-    input_->consume(static_cast<size_t>(p - base));
+    input_->advance(static_cast<size_t>(p - base));
 }
 
 /// Parse a brace comment `{…}` and pass the trimmed text to the visitor.
@@ -690,10 +690,10 @@ _forceinline void PGNParser::parseComment() {
     while (q < end && *q != '}')
         ++q;
 
-    input_->consume(static_cast<size_t>(q - start));
+    input_->advance(static_cast<size_t>(q - start));
 
     if (q < end)
-        input_->consume(1);
+        input_->advance(1);
 
     std::string_view sv(start, static_cast<size_t>(q - start));
 
@@ -727,7 +727,7 @@ void PGNParser::parseLineComment() {
     const char *q = start;
     while (q < end && *q != '\n')
         ++q;
-    input_->consume(static_cast<size_t>(q - start));
+    input_->advance(static_cast<size_t>(q - start));
     if (!input_->eof() && input_->peek() == '\n')
         input_->read();
     if (!input_->eof() && input_->peek() == '\r')
@@ -824,7 +824,7 @@ _forceinline std::string_view PGNParser::readMove() {
     }
 
     size_t len = static_cast<size_t>(p - start);
-    input_->consume(len);
+    input_->advance(len);
     return { start, len };
 }
 /// Parse a non-negative decimal integer from the current input position.
@@ -844,7 +844,7 @@ _forceinline int PGNParser::readNumber() {
         ++p;
     }
 
-    input_->consume(static_cast<size_t>(p - input_->data()));
+    input_->advance(static_cast<size_t>(p - input_->data()));
     return num;
 }
 
