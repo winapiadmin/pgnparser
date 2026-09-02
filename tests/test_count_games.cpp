@@ -65,12 +65,17 @@ static int count_full(std::string_view data) {
 // Maps the file once and runs both parse paths over it via rewind().
 static void check_file_counts(const char *name, int expected, int &failures) {
     const std::string path = TEST_DIR + std::string(name);
-    PGNInput in(path);
-    const int skipCount = count_skip(in);
-    in.rewind();
-    const int fullCount = count_full(in);
-    CHECK_EQ(skipCount, expected);
-    CHECK_EQ(fullCount, expected);
+    try {
+        PGNInput in(path);
+        const int skipCount = count_skip(in);
+        in.rewind();
+        const int fullCount = count_full(in);
+        CHECK_EQ(skipCount, expected);
+        CHECK_EQ(fullCount, expected);
+    } catch (const std::exception &e) {
+        std::cout << "  " << name << ": " << e.what() << std::endl;
+        ++failures;
+    }
 }
 
 int main() {
