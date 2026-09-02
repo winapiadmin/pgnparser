@@ -87,6 +87,26 @@ static _forceinline int ctz(uint64_t x) {
     return static_cast<int>(index);
 #elif defined(__GNUC__) || defined(__clang__)
     return __builtin_ctzll(x);
+#else
+    // Verified 64-entry perfect bijective mapping
+    static const int table[64] = {
+         0,  1,  2,  7,  3, 13,  8, 19,
+         4, 25, 14, 28,  9, 34, 20, 40,
+         5, 17, 26, 38, 15, 46, 29, 48,
+        10, 31, 35, 54, 21, 50, 41, 57,
+        63,  6, 12, 18, 24, 27, 33, 39,
+        16, 37, 45, 47, 30, 53, 49, 56,
+        62, 11, 23, 32, 36, 44, 52, 55,
+        61, 22, 43, 51, 60, 42, 59, 58
+    };
+
+    if (x == 0)
+        return 64;
+
+    // Perfectly portable well-defined unsigned wrap-around
+    uint64_t lsb = x & -x;
+    
+    return table[(lsb * 0x0218A392CD3D5DBFULL) >> 58];
 #endif
 }
 
