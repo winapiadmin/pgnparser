@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
     }
     TestVisitor printer;
     pgn::PGNParser parser(printer);
-    auto start = std::chrono::steady_clock::now();
     pgn::PGNInput input((argv[1]));
+    auto start = std::chrono::steady_clock::now();
     parser.parseAll(input);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed = end - start;

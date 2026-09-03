@@ -1,21 +1,13 @@
 #include "../pgnparser.hpp"
 #include <iostream>
-#include <fstream>
-#include <sstream>
 #include <string>
+#include <string_view>
 
 using namespace pgn;
 
 #ifndef TEST_DIR
 #define TEST_DIR "../tests/"
 #endif
-
-static std::string read_file(const std::string& path) {
-    std::ifstream file(path, std::ios::in | std::ios::binary);
-    if (!file) return "";
-    return std::string((std::istreambuf_iterator<char>(file)),
-                       std::istreambuf_iterator<char>());
-}
 
 struct CountVisitor : PGNVisitor {
     int count = 0;
@@ -43,26 +35,47 @@ struct FullParseVisitor : PGNVisitor {
 
 #define TEST_CASE(name) std::cout << "\n--- " name " ---" << std::endl
 
-static int count_skip(const std::string& data) {
+// Both parse paths run over one mmapped view of the input: files are no
+// longer read into heap strings at all, and are loaded once instead of
+// twice (once per parse path).
+static int count_skip(PGNInput &in) {
     CountVisitor v;
     PGNParser parser(v);
-    parser.parseAll(data);
+    parser.parseAll(in);
     return v.count;
 }
 
-static int count_full(const std::string& data) {
+static int count_full(PGNInput &in) {
     FullParseVisitor v;
     PGNParser parser(v);
-    parser.parseAll(data);
+    parser.parseAll(in);
     return v.count;
 }
 
-static int count_skip_file(const std::string& path) {
-    return count_skip(read_file(path));
+static int count_skip(std::string_view data) {
+    PGNInput in(data);
+    return count_skip(in);
 }
 
-static int count_full_file(const std::string& path) {
-    return count_full(read_file(path));
+static int count_full(std::string_view data) {
+    PGNInput in(data);
+    return count_full(in);
+}
+
+// Maps the file once and runs both parse paths over it via rewind().
+static void check_file_counts(const char *name, int expected, int &failures) {
+    const std::string path = TEST_DIR + std::string(name);
+    try {
+        PGNInput in(path);
+        const int skipCount = count_skip(in);
+        in.rewind();
+        const int fullCount = count_full(in);
+        CHECK_EQ(skipCount, expected);
+        CHECK_EQ(fullCount, expected);
+    } catch (const std::exception &e) {
+        std::cout << "  " << name << ": " << e.what() << std::endl;
+        ++failures;
+    }
 }
 
 int main() {
@@ -70,42 +83,73 @@ int main() {
 
     {
         TEST_CASE("Skip path and full parse agree on all test files");
-        struct FileCount {
+        static const struct FileCount {
             const char* name;
             int expected;
         } files[] = {
-            {"test1.pgn", 1},
-            {"test2.pgn", 1},
-            {"test3.pgn", 1},
-            {"test4.pgn", 3},
-            {"test5.pgn", 1},
-            {"no_moves.pgn", 0},           // no body at all (tags only)
-            {"no_moves_but_game_termination.pgn", 1},
-            {"no_moves_but_game_termination_2.pgn", 1},
-            {"no_moves_but_game_termination_3.pgn", 1},
-            {"no_moves_two_games.pgn", 2},
-            {"no_moves_but_game_termination_multiple.pgn", 2},
-            {"no_moves_but_game_termination_multiple_2.pgn", 3},
-            {"no_result.pgn", 1},
-            {"empty_body.pgn", 1},          // game 1 has no result marker
-            {"skip.pgn", 2},
-            {"multiple.pgn", 4},
+            {                                              "test1.pgn", 1 },
+            {                                              "test2.pgn", 1 },
+            {                                              "test3.pgn", 1 },
+            {                                              "test4.pgn", 3 },
+            {                                              "test5.pgn", 1 },
+            {                                              "basic.pgn", 1 },
+            {                                               "book.pgn", 1 },
+            {                                                "nag.pgn", 1 }, // movetext only, no tag section
+            {                                            "non_ascii.pgn", 1 },
+            {                                     "square_bracket_in_header.pgn", 1 },
+            {                                  "unescaped_quote_header.pgn", 1 },
+            {                                    "backslash_header.pgn", 1 },
+            {                                      "multiple.pgn", 4 },
+            {                                     "test_edge.pgn", 3 },
+            {                                   "no_result.pgn", 1 },
+            {                                   "empty_body.pgn", 1 }, // game 1 has no result marker
+            {                                       "skip.pgn", 2 },
+            {                                   "variations.pgn", 1 }, // nested + stacked variations
+            {                               "test_variations.pgn", 1 },
+            {                           "test_variation_valid.pgn", 1 },
+            {                         "test_variation_simple.pgn", 1 },
+            {                          "test_variation_black.pgn", 1 },
+            {                                             "test_nags.pgn", 1 },
+            {                                            "test_bxa3.pgn", 1 },
+            {                                            "test_bxc3.pgn", 1 },
+            {                        "comment_before_moves.pgn", 1 },
+            {   "lichess_pgn_2026.06.20_prev_internal_engine_vs_internal_engine.UqWasVld.pgn", 1 },
+            {                     "no_moves_but_game_termination.pgn", 1 },
+            {                   "no_moves_but_game_termination_2.pgn", 1 },
+            {                   "no_moves_but_game_termination_3.pgn", 1 },
+            {                                "no_moves_two_games.pgn", 2 },
+            {  "no_moves_but_comment_followed_by_termination_marker.pgn", 2 },
+            {          "no_moves_but_game_termination_multiple.pgn", 2 },
+          { "no_moves_but_game_termination_multiple_2.pgn", 3 },
+            {                                              "no_moves.pgn", 0 }, // no body at all (tags only)
         };
-        for (auto& f : files) {
-            std::string path = TEST_DIR + std::string(f.name);
-            int skipCount = count_skip_file(path);
-            int fullCount = count_full_file(path);
-            CHECK_EQ(skipCount, f.expected);
-            CHECK_EQ(fullCount, f.expected);
+        for (auto& f : files)
+            check_file_counts(f.name, f.expected, failures);
+    }
+
+    {
+        TEST_CASE("Movetext without termination marker: skip counts structure, full needs marker");
+        static const char* noMarkerFiles[] = {
+            "black2move.pgn",
+            "castling.pgn",
+            "newline.pgn",
+            "threefold_repetition.pgn",
+        };
+        for (const char* name : noMarkerFiles) {
+            std::cout << "  " << name << std::endl;
+            PGNInput in(TEST_DIR + std::string(name));
+            CHECK_EQ(count_skip(in), 1); // skip path counts game structure
+            in.rewind();
+            CHECK_EQ(count_full(in), 0); // full path needs a result marker
         }
     }
 
     {
         TEST_CASE("corrupted.pgn: truncated file differs between paths");
-        int skipCount = count_skip_file(TEST_DIR "corrupted.pgn");
-        int fullCount = count_full_file(TEST_DIR "corrupted.pgn");
-        CHECK_EQ(skipCount, 1);  // skip path counts structure
-        CHECK_EQ(fullCount, 0);  // full path needs result marker
+        PGNInput in(TEST_DIR "corrupted.pgn");
+        CHECK_EQ(count_skip(in), 1); // skip path counts structure
+        in.rewind();
+        CHECK_EQ(count_full(in), 0); // full path needs result marker
     }
 
     {
@@ -223,11 +267,26 @@ int main() {
     }
 
     {
-        TEST_CASE("games.pgn count matches");
-        int skipCount = count_skip_file(TEST_DIR "games.pgn");
-        CHECK_EQ(skipCount, 7811);
-        int fullCount = count_full_file(TEST_DIR "games.pgn");
-        CHECK_EQ(fullCount, 7811);
+        TEST_CASE("Large multi-game files: golden counts, both paths agree");
+        static const struct FileCount {
+            const char* name;
+            int expected;
+        } files[] = {
+            {  "games1345598358.pgn",    2 },
+            {  "games1352081361.pgn",   20 },
+            {  "games1567817165.pgn",   27 },
+            {  "games2127584351.pgn",   68 },
+            {  "games1537757853.pgn",  701 },
+            {  "games2123827639.pgn",  748 },
+            {  "games136431434.pgn",  1051 },
+            {  "games1450490177.pgn", 1064 },
+            {  "games1400823794.pgn", 1184 },
+            {  "games1227580063.pgn", 1535 },
+            {  "games1730228391.pgn", 1950 },
+            {         "games.pgn",    7811 },
+        };
+        for (auto& f : files)
+            check_file_counts(f.name, f.expected, failures);
     }
 
     std::cout << "\n==============================" << std::endl;
